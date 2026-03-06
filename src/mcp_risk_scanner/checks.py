@@ -61,11 +61,15 @@ class CheckSpec:
     runner: Callable[[ScanInput], list[Finding]]
 
 
-def run_checks(scan_input: ScanInput, rules: dict[str, Any] | None = None) -> list[Finding]:
+def run_checks(
+    scan_input: ScanInput,
+    rules: dict[str, Any] | None = None,
+    extra_checks: list[CheckSpec] | None = None,
+) -> list[Finding]:
     active_rules = _merge_rules(rules)
     findings: list[Finding] = []
 
-    for spec in _build_registry(active_rules):
+    for spec in _build_registry(active_rules, extra_checks=extra_checks):
         if not _check_enabled(spec.check_id, active_rules):
             continue
         findings.extend(spec.runner(scan_input))
@@ -76,10 +80,13 @@ def run_checks(scan_input: ScanInput, rules: dict[str, Any] | None = None) -> li
     return findings
 
 
-def list_available_checks(rules: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+def list_available_checks(
+    rules: dict[str, Any] | None = None,
+    extra_checks: list[CheckSpec] | None = None,
+) -> list[dict[str, Any]]:
     active_rules = _merge_rules(rules)
     items: list[dict[str, Any]] = []
-    for spec in _build_registry(active_rules):
+    for spec in _build_registry(active_rules, extra_checks=extra_checks):
         items.append(
             {
                 "check_id": spec.check_id,
@@ -90,20 +97,22 @@ def list_available_checks(rules: dict[str, Any] | None = None) -> list[dict[str,
     return items
 
 
-def known_check_ids() -> set[str]:
-    ids = {spec.check_id for spec in _build_registry(_default_rules())}
+def known_check_ids(extra_checks: list[CheckSpec] | None = None) -> set[str]:
+    ids = {spec.check_id for spec in _build_registry(_default_rules(), extra_checks=extra_checks)}
     ids.add("unpinned_deps")
     ids.update(f"cve_{advisory['name']}" for advisory in KNOWN_VULNERABLE_PACKAGES)
     return ids
 
 
-def _build_registry(active_rules: dict[str, Any]) -> list[CheckSpec]:
+def _build_registry(
+    active_rules: dict[str, Any], extra_checks: list[CheckSpec] | None = None
+) -> list[CheckSpec]:
     dangerous_keywords = active_rules.get("keywords", {}).get(
         "dangerous_tools", list(DANGEROUS_KEYWORDS.keys())
     )
     stale_days = int(active_rules.get("thresholds", {}).get("stale_release_days", 180))
 
-    return [
+    registry = [
         CheckSpec(
             check_id="dangerous_tools",
             default_severity="high",
@@ -182,6 +191,15 @@ def _build_registry(active_rules: dict[str, Any]) -> list[CheckSpec]:
             runner=lambda scan_input: _check_local_hygiene(scan_input.root_dir),
         ),
     ]
+    if extra_checks:
+        base_ids = {spec.check_id for spec in registry}
+        for spec in extra_checks:
+            if spec.check_id in base_ids:
+                raise ValueError(f"Plugin check_id conflicts with built-in check: {spec.check_id}")
+            if any(spec.check_id == existing.check_id for existing in registry):
+                raise ValueError(f"Duplicate check_id in registry: {spec.check_id}")
+            registry.append(spec)
+    return registry
 
 
 def _default_rules() -> dict[str, Any]:

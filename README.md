@@ -29,6 +29,13 @@ List checks under current rules:
 python -m mcp_risk_scanner.cli scan --list-checks --rules ./rules.yml
 ```
 
+Load custom plugin checks:
+
+```bash
+python -m mcp_risk_scanner.cli scan ./samples --plugins ./plugins/my_checks.py --out ./out
+python -m mcp_risk_scanner.cli scan-batch ./fixtures --plugins ./plugins --summary-only --out ./out
+```
+
 Or install as editable:
 
 ```bash
@@ -94,3 +101,5 @@ Use `--fail-on-critical` and `--min-score` for CI-style pass/fail gates.
 Rule config file defaults are in `rules.yml`; reports include the applied rules source path.
 Rules validation rejects unknown `check_id`s in `checks` and `severity_overrides`.
 Rules parsing uses `PyYAML` (`yaml.safe_load`) with clear validation errors.
+Plugin checks can be provided via `CHECKS` (or `get_checks()`) as dict entries:
+`check_id`, `default_severity`, `runner`.

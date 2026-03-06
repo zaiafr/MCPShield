@@ -12,6 +12,7 @@ from .checks import list_available_checks, run_checks
 from .collector import collect_input
 from . import __version__
 from .models import Finding, ScanResult
+from .plugins import load_plugin_checks
 from .report import render_json, render_markdown
 from .rules import load_rules
 from .scoring import calculate_score
@@ -39,6 +40,12 @@ def main() -> None:
         "--rules",
         default=None,
         help="Path to rules.yml for check toggles/severity/threshold overrides",
+    )
+    scan_parser.add_argument(
+        "--plugins",
+        nargs="*",
+        default=None,
+        help="Plugin .py files or directories containing plugin checks",
     )
     scan_parser.add_argument(
         "--list-checks",
@@ -82,6 +89,12 @@ def main() -> None:
         default=None,
         help="Path to rules.yml for check toggles/severity/threshold overrides",
     )
+    batch_parser.add_argument(
+        "--plugins",
+        nargs="*",
+        default=None,
+        help="Plugin .py files or directories containing plugin checks",
+    )
     compare_parser = subparsers.add_parser(
         "compare-summaries", help="Compare two summary.csv files and write delta outputs"
     )
@@ -93,12 +106,21 @@ def main() -> None:
 
     if args.command == "scan":
         if args.list_checks:
-            rules, _ = load_rules(args.rules)
-            _print_check_list(rules)
+            plugin_checks = load_plugin_checks(args.plugins)
+            rules, _ = load_rules(
+                args.rules, extra_check_ids={spec.check_id for spec in plugin_checks}
+            )
+            _print_check_list(rules, plugin_checks=plugin_checks)
             return
         if not args.target:
             raise ValueError("scan target is required unless --list-checks is used")
-        _run_scan(args.target, args.format, args.out, rules_path=args.rules)
+        _run_scan(
+            args.target,
+            args.format,
+            args.out,
+            rules_path=args.rules,
+            plugin_paths=args.plugins,
+        )
     elif args.command == "scan-batch":
         _run_scan_batch(
             args.input_dir,
@@ -108,6 +130,7 @@ def main() -> None:
             fail_on_critical=args.fail_on_critical,
             min_score=args.min_score,
             rules_path=args.rules,
+            plugin_paths=args.plugins,
         )
     elif args.command == "compare-summaries":
         _run_compare_summaries(args.old_csv, args.new_csv, args.out)
@@ -118,10 +141,16 @@ def _run_scan(
     output_format: str,
     out_dir: str,
     rules_path: str | None = None,
+    plugin_paths: list[str] | None = None,
     quiet: bool = False,
 ) -> None:
-    rules, rules_source = load_rules(rules_path)
-    result = _scan_target(target, rules=rules, rules_source=rules_source)
+    plugin_checks = load_plugin_checks(plugin_paths)
+    rules, rules_source = load_rules(
+        rules_path, extra_check_ids={spec.check_id for spec in plugin_checks}
+    )
+    result = _scan_target(
+        target, rules=rules, rules_source=rules_source, plugin_checks=plugin_checks
+    )
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -130,8 +159,10 @@ def _run_scan(
     _emit(f"Final score: {result.score}/100 ({result.risk_level})", quiet=quiet)
 
 
-def _print_check_list(rules: dict[str, Any] | None = None) -> None:
-    checks = list_available_checks(rules)
+def _print_check_list(
+    rules: dict[str, Any] | None = None, plugin_checks: list[Any] | None = None
+) -> None:
+    checks = list_available_checks(rules, extra_checks=plugin_checks)
     print("check_id | default_severity | enabled")
     print("---|---|---")
     for check in checks:
@@ -143,9 +174,10 @@ def _scan_target(
     target: str,
     rules: dict[str, Any] | None = None,
     rules_source: str | None = None,
+    plugin_checks: list[Any] | None = None,
 ) -> ScanResult:
     scan_input = collect_input(target)
-    findings = _sort_findings(run_checks(scan_input, rules))
+    findings = _sort_findings(run_checks(scan_input, rules, extra_checks=plugin_checks))
     score, risk_level = calculate_score(findings)
     return ScanResult(
         target=scan_input.target,
@@ -165,6 +197,7 @@ def _run_scan_batch(
     fail_on_critical: bool = False,
     min_score: float | None = None,
     rules_path: str | None = None,
+    plugin_paths: list[str] | None = None,
     quiet: bool = False,
 ) -> None:
     root = Path(input_dir)
@@ -179,11 +212,16 @@ def _run_scan_batch(
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    rules, rules_source = load_rules(rules_path)
+    plugin_checks = load_plugin_checks(plugin_paths)
+    rules, rules_source = load_rules(
+        rules_path, extra_check_ids={spec.check_id for spec in plugin_checks}
+    )
 
     results: list[ScanResult] = []
     for target in targets:
-        result = _scan_target(str(target), rules=rules, rules_source=rules_source)
+        result = _scan_target(
+            str(target), rules=rules, rules_source=rules_source, plugin_checks=plugin_checks
+        )
         results.append(result)
         if not summary_only:
             _write_result_files(
