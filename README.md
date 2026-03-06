@@ -18,11 +18,18 @@ pip install -e .
 mcp-risk-scan scan ./samples/insecure-server.json --format both --out ./out
 ```
 
+Batch scan local fixtures:
+
+```bash
+python -m mcp_risk_scanner.cli scan-batch ./fixtures --format both --out ./out
+```
+
 ## Supported inputs
 - Local `server.json` file path
 - Local directory containing `server.json` (optionally `package.json`)
 - HTTP(S) URL to `server.json`
 - npm package name (best-effort fetch from npm registry)
+- Batch mode: directory with subdirectories that contain `server.json`
 
 ## Current checks (v1)
 - Known vulnerable dependency versions (small built-in advisory set)
@@ -44,3 +51,4 @@ mcp-risk-scan scan ./samples/insecure-server.json --format both --out ./out
 
 ## Notes
 This is a first-pass static scanner. It does not execute code and can produce false positives.
+Findings are output in deterministic order (severity, then check id) for stable diffs.
