@@ -120,6 +120,29 @@ thresholds:
             dangerous = [c for c in checks if c["check_id"] == "dangerous_tools"][0]
             self.assertEqual(dangerous["enabled"], False)
 
+    def test_malformed_yaml_raises_clear_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rules_path = Path(tmp) / "rules.yml"
+            rules_path.write_text("checks:\n  dangerous_tools: [\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_rules(str(rules_path))
+
+    def test_yaml_nested_keyword_list_parses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rules_path = Path(tmp) / "rules.yml"
+            rules_path.write_text(
+                """
+keywords:
+  dangerous_tools:
+    - exec
+    - eval
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            rules, _ = load_rules(str(rules_path))
+            self.assertEqual(rules["keywords"]["dangerous_tools"], ["exec", "eval"])
+
 
 if __name__ == "__main__":
     unittest.main()

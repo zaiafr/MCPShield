@@ -87,3 +87,4 @@ Use `--fail-on-critical` and `--min-score` for CI-style pass/fail gates.
 `compare-summaries` writes `delta.json` and `delta.md` for release-over-release tracking.
 Rule config file defaults are in `rules.yml`; reports include the applied rules source path.
 Rules validation rejects unknown `check_id`s in `checks` and `severity_overrides`.
+Rules parsing uses `PyYAML` (`yaml.safe_load`) with clear validation errors.

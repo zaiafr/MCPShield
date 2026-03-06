@@ -9,7 +9,7 @@ description = "Phase 1 MCP server risk scanner CLI"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Codex" }]
-dependencies = []
+dependencies = ["PyYAML>=6.0"]
 
 [project.scripts]
 mcp-risk-scan = "mcp_risk_scanner.cli:main"

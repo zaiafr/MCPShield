@@ -7,6 +7,11 @@ from typing import Any
 
 from .checks import known_check_ids
 
+try:
+    import yaml
+except Exception:  # pragma: no cover
+    yaml = None
+
 
 DEFAULT_RULES: dict[str, Any] = {
     "checks": {},
@@ -56,85 +61,17 @@ def _parse_structured_text(raw: str) -> Any:
     if not stripped:
         return {}
 
+    if yaml is not None:
+        try:
+            parsed = yaml.safe_load(stripped)
+        except yaml.YAMLError as exc:  # type: ignore[union-attr]
+            raise ValueError(f"Invalid YAML rules file: {exc}") from exc
+        return {} if parsed is None else parsed
+
     try:
         return json.loads(stripped)
     except json.JSONDecodeError:
-        return _parse_simple_yaml(stripped)
-
-
-def _parse_simple_yaml(raw: str) -> Any:
-    lines = []
-    for original in raw.splitlines():
-        no_comment = original.split("#", 1)[0].rstrip()
-        if not no_comment.strip():
-            continue
-        indent = len(no_comment) - len(no_comment.lstrip(" "))
-        lines.append((indent, no_comment.strip()))
-
-    if not lines:
-        return {}
-
-    root: dict[str, Any] = {}
-    stack: list[tuple[int, Any]] = [(-1, root)]
-
-    for idx, (indent, token) in enumerate(lines):
-        while len(stack) > 1 and indent <= stack[-1][0]:
-            stack.pop()
-
-        parent = stack[-1][1]
-        if token.startswith("- "):
-            if not isinstance(parent, list):
-                raise ValueError("Invalid YAML list placement")
-            item_token = token[2:].strip()
-            parent.append(_parse_scalar(item_token))
-            continue
-
-        if ":" not in token:
-            raise ValueError(f"Invalid YAML line: {token}")
-
-        key, value = token.split(":", 1)
-        key = key.strip()
-        value = value.strip()
-        if not isinstance(parent, dict):
-            raise ValueError("Invalid YAML mapping placement")
-
-        if value:
-            parent[key] = _parse_scalar(value)
-            continue
-
-        # determine nested container type using the next line
-        next_container: Any = {}
-        if idx + 1 < len(lines):
-            next_indent, next_token = lines[idx + 1]
-            if next_indent > indent and next_token.startswith("- "):
-                next_container = []
-        parent[key] = next_container
-        stack.append((indent, next_container))
-
-    return root
-
-
-def _parse_scalar(value: str) -> Any:
-    lowered = value.lower()
-    if lowered == "true":
-        return True
-    if lowered == "false":
-        return False
-    if lowered in {"null", "none"}:
-        return None
-
-    # Strip simple quotes
-    if (value.startswith('"') and value.endswith('"')) or (
-        value.startswith("'") and value.endswith("'")
-    ):
-        return value[1:-1]
-
-    try:
-        if "." in value:
-            return float(value)
-        return int(value)
-    except ValueError:
-        return value
+        raise ValueError("Rules file is neither valid YAML nor JSON")
 
 
 def _deep_merge(base: dict[str, Any], incoming: dict[str, Any]) -> None:
