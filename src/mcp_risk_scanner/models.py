@@ -31,6 +31,7 @@ class Finding:
     message: str
     evidence: str
     remediation: str
+    evidence_data: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

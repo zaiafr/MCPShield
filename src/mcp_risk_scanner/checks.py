@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .models import Finding, ScanInput
-from .rules import default_rules
 
 
 DANGEROUS_KEYWORDS = {
@@ -46,33 +46,163 @@ KNOWN_VULNERABLE_PACKAGES = [
     },
 ]
 
+_DEFAULT_RULES = {
+    "checks": {},
+    "severity_overrides": {},
+    "thresholds": {"stale_release_days": 180},
+    "keywords": {"dangerous_tools": list(DANGEROUS_KEYWORDS.keys())},
+}
+
+
+@dataclass(frozen=True)
+class CheckSpec:
+    check_id: str
+    default_severity: str
+    runner: Callable[[ScanInput], list[Finding]]
+
 
 def run_checks(scan_input: ScanInput, rules: dict[str, Any] | None = None) -> list[Finding]:
-    active_rules = rules or default_rules()
+    active_rules = _merge_rules(rules)
+    findings: list[Finding] = []
+
+    for spec in _build_registry(active_rules):
+        if not _check_enabled(spec.check_id, active_rules):
+            continue
+        findings.extend(spec.runner(scan_input))
+
+    findings = [f for f in findings if _check_enabled(f.check_id, active_rules)]
+    _apply_severity_overrides(findings, active_rules)
+    _normalize_evidence_data(findings)
+    return findings
+
+
+def list_available_checks(rules: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    active_rules = _merge_rules(rules)
+    items: list[dict[str, Any]] = []
+    for spec in _build_registry(active_rules):
+        items.append(
+            {
+                "check_id": spec.check_id,
+                "default_severity": spec.default_severity,
+                "enabled": _check_enabled(spec.check_id, active_rules),
+            }
+        )
+    return items
+
+
+def known_check_ids() -> set[str]:
+    ids = {spec.check_id for spec in _build_registry(_default_rules())}
+    ids.add("unpinned_deps")
+    ids.update(f"cve_{advisory['name']}" for advisory in KNOWN_VULNERABLE_PACKAGES)
+    return ids
+
+
+def _build_registry(active_rules: dict[str, Any]) -> list[CheckSpec]:
     dangerous_keywords = active_rules.get("keywords", {}).get(
         "dangerous_tools", list(DANGEROUS_KEYWORDS.keys())
     )
     stale_days = int(active_rules.get("thresholds", {}).get("stale_release_days", 180))
 
-    findings: list[Finding] = []
-    findings.extend(_check_dangerous_tools(scan_input.server_json, dangerous_keywords))
-    findings.extend(_check_runtime_command(scan_input.server_json))
-    findings.extend(_check_ssrf_hint(scan_input.server_json))
-    findings.extend(_check_missing_network_allowlist(scan_input.server_json))
-    findings.extend(_check_token_passthrough_hint(scan_input.server_json))
-    findings.extend(_check_destructive_tool_confirmation(scan_input.server_json))
-    findings.extend(_check_auth_presence(scan_input.server_json))
-    findings.extend(_check_broad_scopes(scan_input.server_json))
-    findings.extend(_check_least_privilege_metadata(scan_input.server_json))
-    findings.extend(_check_tenant_isolation_metadata(scan_input.server_json))
-    findings.extend(_check_audit_logging_metadata(scan_input.server_json))
-    findings.extend(_check_stale_release(scan_input.server_json, stale_days))
-    findings.extend(_check_dependencies(scan_input.package_json))
-    findings.extend(_check_security_metadata(scan_input.server_json))
-    findings.extend(_check_local_hygiene(scan_input.root_dir))
-    findings = [f for f in findings if _check_enabled(f.check_id, active_rules)]
-    _apply_severity_overrides(findings, active_rules)
-    return findings
+    return [
+        CheckSpec(
+            check_id="dangerous_tools",
+            default_severity="high",
+            runner=lambda scan_input: _check_dangerous_tools(
+                scan_input.server_json, dangerous_keywords
+            ),
+        ),
+        CheckSpec(
+            check_id="runtime_command",
+            default_severity="medium",
+            runner=lambda scan_input: _check_runtime_command(scan_input.server_json),
+        ),
+        CheckSpec(
+            check_id="ssrf_hint",
+            default_severity="high",
+            runner=lambda scan_input: _check_ssrf_hint(scan_input.server_json),
+        ),
+        CheckSpec(
+            check_id="missing_network_allowlist",
+            default_severity="medium",
+            runner=lambda scan_input: _check_missing_network_allowlist(scan_input.server_json),
+        ),
+        CheckSpec(
+            check_id="token_passthrough_hint",
+            default_severity="high",
+            runner=lambda scan_input: _check_token_passthrough_hint(scan_input.server_json),
+        ),
+        CheckSpec(
+            check_id="destructive_tool_confirmation_missing",
+            default_severity="high",
+            runner=lambda scan_input: _check_destructive_tool_confirmation(scan_input.server_json),
+        ),
+        CheckSpec(
+            check_id="auth_missing",
+            default_severity="medium",
+            runner=lambda scan_input: _check_auth_presence(scan_input.server_json),
+        ),
+        CheckSpec(
+            check_id="broad_scopes",
+            default_severity="high",
+            runner=lambda scan_input: _check_broad_scopes(scan_input.server_json),
+        ),
+        CheckSpec(
+            check_id="least_privilege_missing",
+            default_severity="medium",
+            runner=lambda scan_input: _check_least_privilege_metadata(scan_input.server_json),
+        ),
+        CheckSpec(
+            check_id="tenant_isolation_missing",
+            default_severity="high",
+            runner=lambda scan_input: _check_tenant_isolation_metadata(scan_input.server_json),
+        ),
+        CheckSpec(
+            check_id="audit_logging_missing",
+            default_severity="medium",
+            runner=lambda scan_input: _check_audit_logging_metadata(scan_input.server_json),
+        ),
+        CheckSpec(
+            check_id="stale_release",
+            default_severity="medium",
+            runner=lambda scan_input: _check_stale_release(scan_input.server_json, stale_days),
+        ),
+        CheckSpec(
+            check_id="dependency_hygiene",
+            default_severity="medium",
+            runner=lambda scan_input: _check_dependencies(scan_input.package_json),
+        ),
+        CheckSpec(
+            check_id="security_metadata",
+            default_severity="low",
+            runner=lambda scan_input: _check_security_metadata(scan_input.server_json),
+        ),
+        CheckSpec(
+            check_id="missing_docs",
+            default_severity="low",
+            runner=lambda scan_input: _check_local_hygiene(scan_input.root_dir),
+        ),
+    ]
+
+
+def _default_rules() -> dict[str, Any]:
+    return {
+        "checks": dict(_DEFAULT_RULES["checks"]),
+        "severity_overrides": dict(_DEFAULT_RULES["severity_overrides"]),
+        "thresholds": dict(_DEFAULT_RULES["thresholds"]),
+        "keywords": {"dangerous_tools": list(_DEFAULT_RULES["keywords"]["dangerous_tools"])},
+    }
+
+
+def _merge_rules(rules: dict[str, Any] | None) -> dict[str, Any]:
+    merged = _default_rules()
+    if not rules:
+        return merged
+    for key, value in rules.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key].update(value)
+        else:
+            merged[key] = value
+    return merged
 
 
 def _check_dangerous_tools(server_json: dict[str, Any], keywords: list[str]) -> list[Finding]:
@@ -104,6 +234,7 @@ def _check_dangerous_tools(server_json: dict[str, Any], keywords: list[str]) -> 
                     "Restrict high-risk tools by default, add allowlists, and enforce explicit approval "
                     "for write/exec/network operations."
                 ),
+                evidence_data={"tools": hit_tools[:10], "keywords": keywords},
             )
         )
 
@@ -127,6 +258,7 @@ def _check_runtime_command(server_json: dict[str, Any]) -> list[Finding]:
                 message="Server launch command includes shell-style execution patterns.",
                 evidence=f"Command: {combined}",
                 remediation="Use direct executable entrypoints and avoid dynamic shell evaluation.",
+                evidence_data={"command": command, "args": list(server_json.get("args", []))},
             )
         )
 
@@ -158,6 +290,7 @@ def _check_ssrf_hint(server_json: dict[str, Any]) -> list[Finding]:
                 message="Tool metadata suggests untrusted URL fetching from user-controlled input.",
                 evidence=f"Tools: {', '.join(matched_tools)}",
                 remediation="Validate URLs strictly and block internal/private network destinations.",
+                evidence_data={"tools": matched_tools},
             )
         )
     return findings
@@ -194,6 +327,7 @@ def _check_missing_network_allowlist(server_json: dict[str, Any]) -> list[Findin
                 message="Network-capable tools detected without host/domain allowlist metadata.",
                 evidence="No networkAllowlist or allowedHosts field found",
                 remediation="Define explicit outbound host allowlists and block all other destinations.",
+                evidence_data={"has_allowlist": False},
             )
         )
     return findings
@@ -212,6 +346,7 @@ def _check_auth_presence(server_json: dict[str, Any]) -> list[Finding]:
                 message="No auth or OAuth metadata detected in server descriptor.",
                 evidence="Fields auth/oauth/security are absent",
                 remediation="Define OAuth metadata, supported flows, and minimum required scopes.",
+                evidence_data={"checked_fields": ["auth", "oauth", "security"]},
             )
         )
     return findings
@@ -254,6 +389,7 @@ def _check_token_passthrough_hint(server_json: dict[str, Any]) -> list[Finding]:
                     "Avoid token passthrough. Exchange for scoped tokens, enforce audience checks, "
                     "and isolate tokens per upstream service."
                 ),
+                evidence_data={"matched_hints": matched},
             )
         )
     return findings
@@ -288,6 +424,7 @@ def _check_destructive_tool_confirmation(server_json: dict[str, Any]) -> list[Fi
                 message="Potentially destructive actions are exposed without confirmation guardrails.",
                 evidence=f"Tools: {', '.join(risky_tools)}",
                 remediation="Require explicit confirmation fields and approval flow for destructive actions.",
+                evidence_data={"tools": risky_tools},
             )
         )
     return findings
@@ -309,6 +446,7 @@ def _check_broad_scopes(server_json: dict[str, Any]) -> list[Finding]:
                 message="Auth metadata appears to include broad privilege scopes.",
                 evidence=f"Matched scope markers: {', '.join(matches)}",
                 remediation="Split scopes by action/resource and default to least privilege.",
+                evidence_data={"matched_markers": matches},
             )
         )
     return findings
@@ -334,6 +472,7 @@ def _check_least_privilege_metadata(server_json: dict[str, Any]) -> list[Finding
             message="Auth metadata exists but does not declare least-privilege enforcement guidance.",
             evidence="No leastPrivilege/least_privilege marker found in auth/oauth metadata",
             remediation="Declare least-privilege policy and map scopes to minimal actions/resources.",
+            evidence_data={"has_marker": False},
         )
     )
     return findings
@@ -360,6 +499,7 @@ def _check_tenant_isolation_metadata(server_json: dict[str, Any]) -> list[Findin
             message="Auth metadata does not indicate tenant boundary/isolation controls.",
             evidence="No tenant isolation marker found in auth/oauth metadata",
             remediation="Document tenant isolation model and include tenant-scoped access controls.",
+            evidence_data={"markers": isolation_markers},
         )
     )
     return findings
@@ -386,6 +526,7 @@ def _check_audit_logging_metadata(server_json: dict[str, Any]) -> list[Finding]:
             message="Auth-capable server does not advertise audit/event logging controls.",
             evidence="No audit log marker found in auth/oauth/logging metadata",
             remediation="Document audit log coverage, retention, and export fields (for example SIEM).",
+            evidence_data={"markers": markers},
         )
     )
     return findings
@@ -412,6 +553,7 @@ def _check_stale_release(server_json: dict[str, Any], stale_days: int) -> list[F
                 message="Server metadata appears older than 180 days.",
                 evidence=f"releaseDate/updatedAt: {raw_release}",
                 remediation="Review compatibility with current MCP spec and publish an updated release.",
+                evidence_data={"release_date": raw_release, "threshold_days": stale_days},
             )
         )
     return findings
@@ -442,6 +584,7 @@ def _check_dependencies(package_json: dict[str, Any] | None) -> list[Finding]:
                 message="Broad dependency ranges reduce reproducibility and can pull risky updates.",
                 evidence=f"Examples: {', '.join(unpinned[:10])}",
                 remediation="Pin production dependencies to exact versions and update via controlled bumps.",
+                evidence_data={"dependencies": unpinned[:10]},
             )
         )
 
@@ -460,6 +603,12 @@ def _check_dependencies(package_json: dict[str, Any] | None) -> list[Finding]:
                         f"({advisory['cve']})"
                     ),
                     remediation="Upgrade to a patched version and add dependency scanning in CI.",
+                    evidence_data={
+                        "package": advisory["name"],
+                        "detected_version": dep_version,
+                        "constraint": advisory["constraint"],
+                        "cve": advisory["cve"],
+                    },
                 )
             )
 
@@ -479,6 +628,7 @@ def _check_security_metadata(server_json: dict[str, Any]) -> list[Finding]:
                 message="No security policy/contact metadata was found.",
                 evidence="Expected one of: security, securityPolicy, contact",
                 remediation="Add a security contact and disclosure policy reference.",
+                evidence_data={"expected_fields": ["security", "securityPolicy", "contact"]},
             )
         )
     return findings
@@ -506,6 +656,7 @@ def _check_local_hygiene(root_dir: str | None) -> list[Finding]:
                 message="Local project is missing recommended security/release documents.",
                 evidence=f"Missing files: {', '.join(missing)}",
                 remediation=" ".join(required_docs[name] for name in missing),
+                evidence_data={"missing_files": missing},
             )
         )
 
@@ -585,3 +736,9 @@ def _apply_severity_overrides(findings: list[Finding], rules: dict[str, Any]) ->
         override = overrides.get(finding.check_id)
         if isinstance(override, str) and override.lower() in valid:
             finding.severity = override.lower()
+
+
+def _normalize_evidence_data(findings: list[Finding]) -> None:
+    for finding in findings:
+        if not finding.evidence_data:
+            finding.evidence_data = {"evidence_text": finding.evidence}

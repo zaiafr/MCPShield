@@ -5,6 +5,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from .checks import known_check_ids
+
 
 DEFAULT_RULES: dict[str, Any] = {
     "checks": {},
@@ -159,10 +161,19 @@ def _validate_rules(rules: dict[str, Any]) -> None:
     checks = rules.get("checks", {})
     if not isinstance(checks, dict):
         raise ValueError("checks must be a map")
+    known_ids = known_check_ids()
+    unknown_checks = [key for key in checks if key not in known_ids]
+    if unknown_checks:
+        raise ValueError(f"Unknown check ids in checks: {', '.join(sorted(unknown_checks))}")
 
     sev = rules.get("severity_overrides", {})
     if not isinstance(sev, dict):
         raise ValueError("severity_overrides must be a map")
+    unknown_severity = [key for key in sev if key not in known_ids]
+    if unknown_severity:
+        raise ValueError(
+            "Unknown check ids in severity_overrides: " + ", ".join(sorted(unknown_severity))
+        )
 
     keywords = rules.get("keywords", {})
     if not isinstance(keywords, dict):

@@ -17,6 +17,12 @@ Use custom rules:
 python -m mcp_risk_scanner.cli scan ./samples --rules ./rules.yml --format both --out ./out
 ```
 
+List checks under current rules:
+
+```bash
+python -m mcp_risk_scanner.cli scan --list-checks --rules ./rules.yml
+```
+
 Or install as editable:
 
 ```bash
@@ -80,3 +86,4 @@ Batch mode also writes `summary.csv` with per-target score/risk rows.
 Use `--fail-on-critical` and `--min-score` for CI-style pass/fail gates.
 `compare-summaries` writes `delta.json` and `delta.md` for release-over-release tracking.
 Rule config file defaults are in `rules.yml`; reports include the applied rules source path.
+Rules validation rejects unknown `check_id`s in `checks` and `severity_overrides`.

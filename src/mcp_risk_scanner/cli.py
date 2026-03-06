@@ -8,7 +8,7 @@ import sys
 from collections import Counter
 from typing import Any
 
-from .checks import run_checks
+from .checks import list_available_checks, run_checks
 from .collector import collect_input
 from .models import Finding, ScanResult
 from .report import render_json, render_markdown
@@ -21,7 +21,7 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     scan_parser = subparsers.add_parser("scan", help="Scan a server target")
-    scan_parser.add_argument("target", help="Path, URL, or npm package name")
+    scan_parser.add_argument("target", nargs="?", help="Path, URL, or npm package name")
     scan_parser.add_argument(
         "--format",
         choices=["json", "md", "both"],
@@ -37,6 +37,11 @@ def main() -> None:
         "--rules",
         default=None,
         help="Path to rules.yml for check toggles/severity/threshold overrides",
+    )
+    scan_parser.add_argument(
+        "--list-checks",
+        action="store_true",
+        help="List available checks and exit",
     )
     batch_parser = subparsers.add_parser("scan-batch", help="Scan a directory of local targets")
     batch_parser.add_argument(
@@ -85,6 +90,12 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "scan":
+        if args.list_checks:
+            rules, _ = load_rules(args.rules)
+            _print_check_list(rules)
+            return
+        if not args.target:
+            raise ValueError("scan target is required unless --list-checks is used")
         _run_scan(args.target, args.format, args.out, rules_path=args.rules)
     elif args.command == "scan-batch":
         _run_scan_batch(
@@ -111,6 +122,15 @@ def _run_scan(
     stem = _safe_stem(target)
     _write_result_files(result, output_format, out, stem)
     print(f"Final score: {result.score}/100 ({result.risk_level})")
+
+
+def _print_check_list(rules: dict[str, Any] | None = None) -> None:
+    checks = list_available_checks(rules)
+    print("check_id | default_severity | enabled")
+    print("---|---|---")
+    for check in checks:
+        enabled = "true" if check["enabled"] else "false"
+        print(f"{check['check_id']} | {check['default_severity']} | {enabled}")
 
 
 def _scan_target(

@@ -22,6 +22,7 @@ def render_json(result: ScanResult) -> str:
                 "category": f.category,
                 "message": f.message,
                 "evidence": f.evidence,
+                "evidence_data": f.evidence_data,
                 "remediation": f.remediation,
             }
             for f in result.findings
