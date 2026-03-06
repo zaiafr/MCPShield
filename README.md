@@ -35,6 +35,8 @@ mcp-risk-scan scan ./samples/insecure-server.json --format both --out ./out
 - Overly broad OAuth scopes
 - Missing least-privilege scope policy metadata
 - Missing tenant-isolation metadata
+- Missing audit logging metadata
+- Destructive tools without explicit confirmation metadata
 - Stale release metadata (older than 180 days)
 - Unpinned dependencies (`*`, `latest`, broad ranges)
 - Missing security metadata

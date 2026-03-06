@@ -181,6 +181,49 @@ class ScannerTests(unittest.TestCase):
             ids = {f.check_id for f in findings}
             self.assertIn("tenant_isolation_missing", ids)
 
+    def test_detects_missing_audit_logging_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "x",
+                        "oauth": {
+                            "scopes": ["read:data"],
+                            "leastPrivilege": True,
+                            "tenantIsolation": True,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            scan_input = collect_input(str(d))
+            findings = run_checks(scan_input)
+            ids = {f.check_id for f in findings}
+            self.assertIn("audit_logging_missing", ids)
+
+    def test_detects_destructive_tool_without_confirmation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "x",
+                        "tools": [
+                            {
+                                "name": "delete_file",
+                                "description": "Delete files in workspace",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            scan_input = collect_input(str(d))
+            findings = run_checks(scan_input)
+            ids = {f.check_id for f in findings}
+            self.assertIn("destructive_tool_confirmation_missing", ids)
+
 
 if __name__ == "__main__":
     unittest.main()

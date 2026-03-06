@@ -53,10 +53,12 @@ def run_checks(scan_input: ScanInput) -> list[Finding]:
     findings.extend(_check_ssrf_hint(scan_input.server_json))
     findings.extend(_check_missing_network_allowlist(scan_input.server_json))
     findings.extend(_check_token_passthrough_hint(scan_input.server_json))
+    findings.extend(_check_destructive_tool_confirmation(scan_input.server_json))
     findings.extend(_check_auth_presence(scan_input.server_json))
     findings.extend(_check_broad_scopes(scan_input.server_json))
     findings.extend(_check_least_privilege_metadata(scan_input.server_json))
     findings.extend(_check_tenant_isolation_metadata(scan_input.server_json))
+    findings.extend(_check_audit_logging_metadata(scan_input.server_json))
     findings.extend(_check_stale_release(scan_input.server_json))
     findings.extend(_check_dependencies(scan_input.package_json))
     findings.extend(_check_security_metadata(scan_input.server_json))
@@ -248,6 +250,40 @@ def _check_token_passthrough_hint(server_json: dict[str, Any]) -> list[Finding]:
     return findings
 
 
+def _check_destructive_tool_confirmation(server_json: dict[str, Any]) -> list[Finding]:
+    findings: list[Finding] = []
+    tools = server_json.get("tools", [])
+    if not isinstance(tools, list):
+        return findings
+
+    destructive_terms = ["delete", "remove", "drop", "destroy", "wipe", "refund", "cancel"]
+    risky_tools: list[str] = []
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        blob = " ".join(
+            [str(tool.get("name", "")).lower(), str(tool.get("description", "")).lower()]
+        )
+        if any(term in blob for term in destructive_terms):
+            has_confirmation = "requiresconfirmation" in blob or "confirm" in blob
+            if not has_confirmation:
+                risky_tools.append(str(tool.get("name", "unknown")))
+
+    if risky_tools:
+        findings.append(
+            Finding(
+                check_id="destructive_tool_confirmation_missing",
+                title="Destructive tool lacks explicit confirmation metadata",
+                severity="high",
+                category="safety",
+                message="Potentially destructive actions are exposed without confirmation guardrails.",
+                evidence=f"Tools: {', '.join(risky_tools)}",
+                remediation="Require explicit confirmation fields and approval flow for destructive actions.",
+            )
+        )
+    return findings
+
+
 def _check_broad_scopes(server_json: dict[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
     auth_blob = str(server_json.get("auth", "")) + " " + str(server_json.get("oauth", ""))
@@ -315,6 +351,32 @@ def _check_tenant_isolation_metadata(server_json: dict[str, Any]) -> list[Findin
             message="Auth metadata does not indicate tenant boundary/isolation controls.",
             evidence="No tenant isolation marker found in auth/oauth metadata",
             remediation="Document tenant isolation model and include tenant-scoped access controls.",
+        )
+    )
+    return findings
+
+
+def _check_audit_logging_metadata(server_json: dict[str, Any]) -> list[Finding]:
+    findings: list[Finding] = []
+    oauth = server_json.get("oauth")
+    auth = server_json.get("auth")
+    if not oauth and not auth:
+        return findings
+
+    blob = f"{oauth} {auth} {server_json.get('logging', '')}".lower()
+    markers = ["auditlog", "audit_log", "audit logging", "siem", "eventlog", "event_log"]
+    if any(marker in blob for marker in markers):
+        return findings
+
+    findings.append(
+        Finding(
+            check_id="audit_logging_missing",
+            title="Missing audit logging metadata",
+            severity="medium",
+            category="governance",
+            message="Auth-capable server does not advertise audit/event logging controls.",
+            evidence="No audit log marker found in auth/oauth/logging metadata",
+            remediation="Document audit log coverage, retention, and export fields (for example SIEM).",
         )
     )
     return findings
