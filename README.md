@@ -36,6 +36,10 @@ python -m mcp_risk_scanner.cli scan ./samples --plugins ./plugins/my_checks.py -
 python -m mcp_risk_scanner.cli scan-batch ./fixtures --plugins ./plugins --allow-plugins --summary-only --out ./out
 ```
 
+Plugin docs and examples:
+- `docs/plugins.md`
+- `plugins/examples/`
+
 Generate plugin lock manifest:
 
 ```bash
