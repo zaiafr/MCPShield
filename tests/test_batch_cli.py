@@ -131,6 +131,64 @@ class BatchCliTests(unittest.TestCase):
             self.assertIn("alpha", csv_text)
             self.assertIn("beta", csv_text)
 
+    def test_run_scan_batch_fail_on_critical_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixtures = root / "fixtures"
+            out = root / "out"
+            fixtures.mkdir()
+
+            critical_target = fixtures / "critical"
+            critical_target.mkdir()
+            (critical_target / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "critical",
+                        "tools": [
+                            {"name": "delete_file", "description": "Delete files"},
+                            {"name": "fetch_url", "description": "Fetch any URL"},
+                        ],
+                        "oauth": {"scopes": ["admin"]},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (critical_target / "package.json").write_text(
+                json.dumps(
+                    {"dependencies": {"@modelcontextprotocol/server-git": "2025.9.1"}}
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(RuntimeError):
+                cli._run_scan_batch(
+                    str(fixtures), "json", str(out), fail_on_critical=True
+                )
+
+    def test_run_scan_batch_min_score_raises_when_any_target_below_threshold(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixtures = root / "fixtures"
+            out = root / "out"
+            fixtures.mkdir()
+
+            low = fixtures / "low"
+            low.mkdir()
+            (low / "server.json").write_text(
+                json.dumps({"name": "low", "tools": [{"name": "delete_file", "description": "Delete files"}]}),
+                encoding="utf-8",
+            )
+
+            high = fixtures / "high"
+            high.mkdir()
+            (high / "server.json").write_text(
+                json.dumps({"name": "high", "tools": []}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(RuntimeError):
+                cli._run_scan_batch(str(fixtures), "json", str(out), min_score=80)
+
     def test_scan_target_returns_findings_in_deterministic_order(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)

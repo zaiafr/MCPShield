@@ -30,6 +30,12 @@ Summary-only batch scan:
 python -m mcp_risk_scanner.cli scan-batch ./fixtures --summary-only --out ./out
 ```
 
+Batch scan with quality gates:
+
+```bash
+python -m mcp_risk_scanner.cli scan-batch ./fixtures --out ./out --fail-on-critical --min-score 70
+```
+
 ## Supported inputs
 - Local `server.json` file path
 - Local directory containing `server.json` (optionally `package.json`)
@@ -59,3 +65,4 @@ python -m mcp_risk_scanner.cli scan-batch ./fixtures --summary-only --out ./out
 This is a first-pass static scanner. It does not execute code and can produce false positives.
 Findings are output in deterministic order (severity, then check id) for stable diffs.
 Batch mode also writes `summary.csv` with per-target score/risk rows.
+Use `--fail-on-critical` and `--min-score` for CI-style pass/fail gates.
