@@ -2,3 +2,5 @@ out/
 *:Zone.Identifier
 __pycache__/
 *.pyc
+
+deep-research-report.md
