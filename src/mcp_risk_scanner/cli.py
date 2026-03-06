@@ -10,6 +10,7 @@ from typing import Any
 
 from .checks import list_available_checks, run_checks
 from .collector import collect_input
+from . import __version__
 from .models import Finding, ScanResult
 from .report import render_json, render_markdown
 from .rules import load_rules
@@ -18,6 +19,7 @@ from .scoring import calculate_score
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="mcp-risk-scan", description="Scan MCP server risk")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     scan_parser = subparsers.add_parser("scan", help="Scan a server target")

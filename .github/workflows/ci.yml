@@ -23,6 +23,15 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: CLI smoke check
+        run: |
+          mcp-risk-scan --version
+
       - name: Run tests
         env:
           PYTHONPATH: src

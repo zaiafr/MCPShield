@@ -11,6 +11,12 @@ A narrow MVP scanner that analyzes MCP server metadata and package manifests to 
 python -m mcp_risk_scanner.cli scan ./samples/insecure-server.json --format both --out ./out
 ```
 
+Show CLI version:
+
+```bash
+python -m mcp_risk_scanner.cli --version
+```
+
 Use custom rules:
 
 ```bash
