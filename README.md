@@ -24,6 +24,12 @@ Batch scan local fixtures:
 python -m mcp_risk_scanner.cli scan-batch ./fixtures --format both --out ./out
 ```
 
+Summary-only batch scan:
+
+```bash
+python -m mcp_risk_scanner.cli scan-batch ./fixtures --summary-only --out ./out
+```
+
 ## Supported inputs
 - Local `server.json` file path
 - Local directory containing `server.json` (optionally `package.json`)
@@ -52,3 +58,4 @@ python -m mcp_risk_scanner.cli scan-batch ./fixtures --format both --out ./out
 ## Notes
 This is a first-pass static scanner. It does not execute code and can produce false positives.
 Findings are output in deterministic order (severity, then check id) for stable diffs.
+Batch mode also writes `summary.csv` with per-target score/risk rows.

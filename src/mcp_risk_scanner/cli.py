@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from pathlib import Path
 import sys
@@ -46,13 +47,18 @@ def main() -> None:
         default=".",
         help="Output directory for report files",
     )
+    batch_parser.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="Only write summary outputs (json, md, csv), skip per-target reports",
+    )
 
     args = parser.parse_args()
 
     if args.command == "scan":
         _run_scan(args.target, args.format, args.out)
     elif args.command == "scan-batch":
-        _run_scan_batch(args.input_dir, args.format, args.out)
+        _run_scan_batch(args.input_dir, args.format, args.out, summary_only=args.summary_only)
 
 
 def _run_scan(target: str, output_format: str, out_dir: str) -> None:
@@ -78,7 +84,9 @@ def _scan_target(target: str) -> ScanResult:
     )
 
 
-def _run_scan_batch(input_dir: str, output_format: str, out_dir: str) -> None:
+def _run_scan_batch(
+    input_dir: str, output_format: str, out_dir: str, summary_only: bool = False
+) -> None:
     root = Path(input_dir)
     if not root.exists() or not root.is_dir():
         raise ValueError(f"Input directory not found: {input_dir}")
@@ -96,7 +104,8 @@ def _run_scan_batch(input_dir: str, output_format: str, out_dir: str) -> None:
     for target in targets:
         result = _scan_target(str(target))
         results.append(result)
-        _write_result_files(result, output_format, out, _safe_stem(target.name))
+        if not summary_only:
+            _write_result_files(result, output_format, out, _safe_stem(target.name))
 
     summary = _build_summary(results)
     summary_json_path = out / "summary.json"
@@ -106,6 +115,10 @@ def _run_scan_batch(input_dir: str, output_format: str, out_dir: str) -> None:
     summary_md_path = out / "summary.md"
     summary_md_path.write_text(_render_summary_markdown(summary), encoding="utf-8")
     print(f"Wrote {summary_md_path}")
+
+    summary_csv_path = out / "summary.csv"
+    summary_csv_path.write_text(_render_summary_csv(results), encoding="utf-8")
+    print(f"Wrote {summary_csv_path}")
 
 
 def _write_result_files(result: ScanResult, output_format: str, out: Path, stem: str) -> None:
@@ -171,6 +184,27 @@ def _render_summary_markdown(summary: dict) -> str:
         lines.append(f"| {entry['check_id']} | {entry['count']} |")
     lines.append("")
     return "\n".join(lines)
+
+
+def _render_summary_csv(results: list[ScanResult]) -> str:
+    rows: list[list[str]] = [["target", "score", "risk_level", "findings_count"]]
+    for result in results:
+        rows.append(
+            [
+                result.target,
+                str(result.score),
+                result.risk_level,
+                str(len(result.findings)),
+            ]
+        )
+
+    # Use csv writer for proper quoting; keep line endings stable.
+    from io import StringIO
+
+    buf = StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerows(rows)
+    return buf.getvalue()
 
 
 def _safe_stem(target: str) -> str:

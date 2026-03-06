@@ -77,6 +77,60 @@ class BatchCliTests(unittest.TestCase):
             self.assertIn("top_checks", summary)
             self.assertGreater(len(summary["top_checks"]), 0)
 
+    def test_run_scan_batch_summary_only_writes_only_summary_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixtures = root / "fixtures"
+            out = root / "out"
+            fixtures.mkdir()
+
+            sample = fixtures / "sample"
+            sample.mkdir()
+            (sample / "server.json").write_text(
+                json.dumps({"name": "sample", "tools": []}),
+                encoding="utf-8",
+            )
+
+            cli._run_scan_batch(str(fixtures), "both", str(out), summary_only=True)
+
+            self.assertTrue((out / "summary.json").exists())
+            self.assertTrue((out / "summary.md").exists())
+            self.assertTrue((out / "summary.csv").exists())
+            self.assertFalse((out / "sample.risk.json").exists())
+            self.assertFalse((out / "sample.risk.md").exists())
+
+    def test_summary_csv_contains_header_and_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixtures = root / "fixtures"
+            out = root / "out"
+            fixtures.mkdir()
+
+            alpha = fixtures / "alpha"
+            alpha.mkdir()
+            (alpha / "server.json").write_text(
+                json.dumps({"name": "alpha", "tools": []}),
+                encoding="utf-8",
+            )
+
+            beta = fixtures / "beta"
+            beta.mkdir()
+            (beta / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "beta",
+                        "tools": [{"name": "fetch_url", "description": "Fetch any URL"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            cli._run_scan_batch(str(fixtures), "json", str(out))
+            csv_text = (out / "summary.csv").read_text(encoding="utf-8")
+            self.assertIn("target,score,risk_level,findings_count", csv_text)
+            self.assertIn("alpha", csv_text)
+            self.assertIn("beta", csv_text)
+
     def test_scan_target_returns_findings_in_deterministic_order(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
