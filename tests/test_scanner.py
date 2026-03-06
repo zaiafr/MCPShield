@@ -147,6 +147,40 @@ class ScannerTests(unittest.TestCase):
             ids = {f.check_id for f in findings}
             self.assertIn("missing_network_allowlist", ids)
 
+    def test_detects_missing_least_privilege_scope_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "x",
+                        "oauth": {"scopes": ["read:data"]},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            scan_input = collect_input(str(d))
+            findings = run_checks(scan_input)
+            ids = {f.check_id for f in findings}
+            self.assertIn("least_privilege_missing", ids)
+
+    def test_detects_missing_tenant_isolation_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "x",
+                        "oauth": {"scopes": ["read:data"], "leastPrivilege": True},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            scan_input = collect_input(str(d))
+            findings = run_checks(scan_input)
+            ids = {f.check_id for f in findings}
+            self.assertIn("tenant_isolation_missing", ids)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -55,6 +55,8 @@ def run_checks(scan_input: ScanInput) -> list[Finding]:
     findings.extend(_check_token_passthrough_hint(scan_input.server_json))
     findings.extend(_check_auth_presence(scan_input.server_json))
     findings.extend(_check_broad_scopes(scan_input.server_json))
+    findings.extend(_check_least_privilege_metadata(scan_input.server_json))
+    findings.extend(_check_tenant_isolation_metadata(scan_input.server_json))
     findings.extend(_check_stale_release(scan_input.server_json))
     findings.extend(_check_dependencies(scan_input.package_json))
     findings.extend(_check_security_metadata(scan_input.server_json))
@@ -264,6 +266,57 @@ def _check_broad_scopes(server_json: dict[str, Any]) -> list[Finding]:
                 remediation="Split scopes by action/resource and default to least privilege.",
             )
         )
+    return findings
+
+
+def _check_least_privilege_metadata(server_json: dict[str, Any]) -> list[Finding]:
+    findings: list[Finding] = []
+    oauth = server_json.get("oauth")
+    auth = server_json.get("auth")
+    if not oauth and not auth:
+        return findings
+
+    blob = f"{oauth} {auth}".lower()
+    if "leastprivilege" in blob or "least_privilege" in blob:
+        return findings
+
+    findings.append(
+        Finding(
+            check_id="least_privilege_missing",
+            title="Missing least-privilege metadata",
+            severity="medium",
+            category="auth",
+            message="Auth metadata exists but does not declare least-privilege enforcement guidance.",
+            evidence="No leastPrivilege/least_privilege marker found in auth/oauth metadata",
+            remediation="Declare least-privilege policy and map scopes to minimal actions/resources.",
+        )
+    )
+    return findings
+
+
+def _check_tenant_isolation_metadata(server_json: dict[str, Any]) -> list[Finding]:
+    findings: list[Finding] = []
+    oauth = server_json.get("oauth")
+    auth = server_json.get("auth")
+    if not oauth and not auth:
+        return findings
+
+    blob = f"{oauth} {auth}".lower()
+    isolation_markers = ["tenantisolation", "tenant_isolation", "isolation", "tenant_id"]
+    if any(marker in blob for marker in isolation_markers):
+        return findings
+
+    findings.append(
+        Finding(
+            check_id="tenant_isolation_missing",
+            title="Missing tenant isolation metadata",
+            severity="high",
+            category="auth",
+            message="Auth metadata does not indicate tenant boundary/isolation controls.",
+            evidence="No tenant isolation marker found in auth/oauth metadata",
+            remediation="Document tenant isolation model and include tenant-scoped access controls.",
+        )
+    )
     return findings
 
 

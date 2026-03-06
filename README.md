@@ -33,6 +33,8 @@ mcp-risk-scan scan ./samples/insecure-server.json --format both --out ./out
 - Token passthrough behavior hints
 - Missing auth metadata
 - Overly broad OAuth scopes
+- Missing least-privilege scope policy metadata
+- Missing tenant-isolation metadata
 - Stale release metadata (older than 180 days)
 - Unpinned dependencies (`*`, `latest`, broad ranges)
 - Missing security metadata
