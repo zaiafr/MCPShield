@@ -36,6 +36,12 @@ python -m mcp_risk_scanner.cli scan ./samples --plugins ./plugins/my_checks.py -
 python -m mcp_risk_scanner.cli scan-batch ./fixtures --plugins ./plugins --allow-plugins --summary-only --out ./out
 ```
 
+Generate plugin lock manifest:
+
+```bash
+python -m mcp_risk_scanner.cli plugin-manifest ./plugins --out ./plugins.lock
+```
+
 Or install as editable:
 
 ```bash
@@ -105,3 +111,5 @@ Plugin checks can be provided via `CHECKS` (or `get_checks()`) as dict entries:
 `check_id`, `default_severity`, `runner`.
 Plugin loading is opt-in (`--allow-plugins`), enforces check_id namespace
 (`plugin_` or `<module>_`), and isolates plugin failures/timeouts into findings.
+Use `--allow-plugin-origin <path-prefix>` and `--plugin-lock ./plugins.lock`
+to enforce trusted plugin paths and sha256 hash pinning.

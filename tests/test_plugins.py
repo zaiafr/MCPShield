@@ -7,7 +7,7 @@ from pathlib import Path
 from mcp_risk_scanner.checks import known_check_ids, run_checks, list_available_checks
 from mcp_risk_scanner.collector import collect_input
 from mcp_risk_scanner.rules import load_rules
-from mcp_risk_scanner.plugins import load_plugin_checks
+from mcp_risk_scanner.plugins import load_plugin_checks, build_plugin_manifest
 
 
 class PluginTests(unittest.TestCase):
@@ -219,6 +219,86 @@ CHECKS = [
             match = [f for f in findings if f.check_id == "plugin_slow_check"]
             self.assertEqual(len(match), 1)
             self.assertIn("timed out", match[0].title.lower())
+
+    def test_plugin_origin_allowlist_blocks_untrusted_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trusted = root / "trusted"
+            untrusted = root / "untrusted"
+            trusted.mkdir()
+            untrusted.mkdir()
+
+            trusted_plugin = trusted / "plugin_ok.py"
+            trusted_plugin.write_text(
+                """
+def check(scan_input):
+    return []
+CHECKS = [{"check_id":"plugin_ok_check","default_severity":"low","runner":check}]
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            untrusted_plugin = untrusted / "plugin_bad.py"
+            untrusted_plugin.write_text(
+                """
+def check(scan_input):
+    return []
+CHECKS = [{"check_id":"plugin_bad_check","default_severity":"low","runner":check}]
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            allowed = load_plugin_checks(
+                [str(trusted_plugin)], allowed_origins=[str(trusted)]
+            )
+            self.assertEqual(len(allowed), 1)
+
+            with self.assertRaises(ValueError):
+                load_plugin_checks([str(untrusted_plugin)], allowed_origins=[str(trusted)])
+
+    def test_plugin_lock_hash_mismatch_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plugin_file = root / "plugin_lock.py"
+            plugin_file.write_text(
+                """
+def check(scan_input):
+    return []
+CHECKS = [{"check_id":"plugin_lock_check","default_severity":"low","runner":check}]
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            lock_file = root / "plugins.lock"
+            lock_file.write_text(
+                json.dumps({str(plugin_file.resolve()): "deadbeef"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ValueError):
+                load_plugin_checks([str(plugin_file)], lock_file=str(lock_file))
+
+    def test_build_plugin_manifest_contains_sha256(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plugin_file = root / "plugin_manifest.py"
+            plugin_file.write_text(
+                """
+def check(scan_input):
+    return []
+CHECKS = [{"check_id":"plugin_manifest_check","default_severity":"low","runner":check}]
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            manifest = build_plugin_manifest([str(plugin_file)])
+            key = str(plugin_file.resolve())
+            self.assertIn(key, manifest)
+            self.assertEqual(len(manifest[key]), 64)
 
 
 if __name__ == "__main__":

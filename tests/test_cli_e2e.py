@@ -135,6 +135,73 @@ CHECKS = [
             )
             self.assertEqual(allowed.returncode, 0, msg=allowed.stderr)
 
+    def test_plugin_manifest_and_lock_enforcement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "target"
+            target.mkdir()
+            (target / "server.json").write_text(
+                json.dumps({"name": "x", "tools": []}), encoding="utf-8"
+            )
+            plugin = root / "plugin_locked.py"
+            plugin.write_text(
+                """
+def check(scan_input):
+    return []
+
+CHECKS = [
+    {
+        "check_id": "plugin_locked_check",
+        "default_severity": "low",
+        "runner": check,
+    }
+]
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            lock_path = root / "plugins.lock"
+            manifest = self._run("plugin-manifest", str(plugin), "--out", str(lock_path))
+            self.assertEqual(manifest.returncode, 0, msg=manifest.stderr)
+            self.assertTrue(lock_path.exists())
+
+            ok = self._run(
+                "scan",
+                str(target),
+                "--plugins",
+                str(plugin),
+                "--allow-plugins",
+                "--plugin-lock",
+                str(lock_path),
+                "--format",
+                "json",
+                "--out",
+                str(root / "out"),
+            )
+            self.assertEqual(ok.returncode, 0, msg=ok.stderr)
+
+            lock_data = json.loads(lock_path.read_text(encoding="utf-8"))
+            key = next(iter(lock_data.keys()))
+            lock_data[key] = "deadbeef"
+            lock_path.write_text(json.dumps(lock_data, indent=2) + "\n", encoding="utf-8")
+
+            bad = self._run(
+                "scan",
+                str(target),
+                "--plugins",
+                str(plugin),
+                "--allow-plugins",
+                "--plugin-lock",
+                str(lock_path),
+                "--format",
+                "json",
+                "--out",
+                str(root / "out2"),
+            )
+            self.assertNotEqual(bad.returncode, 0)
+            self.assertIn("Plugin hash mismatch", bad.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

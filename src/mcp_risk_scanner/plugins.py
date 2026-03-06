@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+import hashlib
 import importlib.util
+import json
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -13,11 +15,17 @@ from .models import Finding
 PLUGIN_RUNNER_TIMEOUT_SECONDS = 1.0
 
 
-def load_plugin_checks(plugin_paths: list[str] | None) -> list[CheckSpec]:
+def load_plugin_checks(
+    plugin_paths: list[str] | None,
+    allowed_origins: list[str] | None = None,
+    lock_file: str | None = None,
+) -> list[CheckSpec]:
     if not plugin_paths:
         return []
 
     files = _expand_plugin_files(plugin_paths)
+    _validate_allowed_origins(files, allowed_origins)
+    _validate_lock_file(files, lock_file)
     checks: list[CheckSpec] = []
     seen_ids: set[str] = set()
 
@@ -32,6 +40,14 @@ def load_plugin_checks(plugin_paths: list[str] | None) -> list[CheckSpec]:
             checks.append(spec)
 
     return checks
+
+
+def build_plugin_manifest(plugin_paths: list[str]) -> dict[str, str]:
+    files = _expand_plugin_files(plugin_paths)
+    manifest: dict[str, str] = {}
+    for file_path in files:
+        manifest[str(file_path.resolve())] = _sha256_file(file_path)
+    return manifest
 
 
 def _expand_plugin_files(plugin_paths: list[str]) -> list[Path]:
@@ -53,7 +69,59 @@ def _expand_plugin_files(plugin_paths: list[str]) -> list[Path]:
 
     if not files:
         raise ValueError("No plugin python files found")
-    return files
+    return [p.resolve() for p in files]
+
+
+def _validate_allowed_origins(files: list[Path], allowed_origins: list[str] | None) -> None:
+    if not allowed_origins:
+        return
+    allowed = [Path(p).resolve() for p in allowed_origins]
+    for file_path in files:
+        if not any(_is_relative_to(file_path, prefix) for prefix in allowed):
+            raise ValueError(f"Plugin file not allowed by origin policy: {file_path}")
+
+
+def _validate_lock_file(files: list[Path], lock_file: str | None) -> None:
+    if not lock_file:
+        return
+    lock_path = Path(lock_file)
+    if not lock_path.exists():
+        raise ValueError(f"Plugin lock file not found: {lock_file}")
+    try:
+        lock_payload = json.loads(lock_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid plugin lock file JSON: {lock_file}") from exc
+
+    if not isinstance(lock_payload, dict):
+        raise ValueError("Plugin lock file must contain a JSON object mapping path->sha256")
+
+    for file_path in files:
+        key = str(file_path.resolve())
+        expected = lock_payload.get(key)
+        if not isinstance(expected, str):
+            raise ValueError(f"Missing plugin hash in lock file for: {key}")
+        actual = _sha256_file(file_path)
+        if actual != expected:
+            raise ValueError(f"Plugin hash mismatch for {key}")
+
+
+def _sha256_file(path: Path) -> str:
+    hasher = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(8192)
+            if not chunk:
+                break
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _is_relative_to(path: Path, prefix: Path) -> bool:
+    try:
+        path.relative_to(prefix)
+        return True
+    except ValueError:
+        return False
 
 
 def _load_module_from_file(path: Path) -> ModuleType:

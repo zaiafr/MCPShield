@@ -53,6 +53,17 @@ def main() -> None:
         help="Explicitly allow loading and executing plugin checks",
     )
     scan_parser.add_argument(
+        "--allow-plugin-origin",
+        action="append",
+        default=None,
+        help="Allowed plugin path prefix (repeatable)",
+    )
+    scan_parser.add_argument(
+        "--plugin-lock",
+        default=None,
+        help="Path to plugin lock JSON mapping plugin absolute paths to sha256",
+    )
+    scan_parser.add_argument(
         "--list-checks",
         action="store_true",
         help="List available checks and exit",
@@ -105,18 +116,47 @@ def main() -> None:
         action="store_true",
         help="Explicitly allow loading and executing plugin checks",
     )
+    batch_parser.add_argument(
+        "--allow-plugin-origin",
+        action="append",
+        default=None,
+        help="Allowed plugin path prefix (repeatable)",
+    )
+    batch_parser.add_argument(
+        "--plugin-lock",
+        default=None,
+        help="Path to plugin lock JSON mapping plugin absolute paths to sha256",
+    )
     compare_parser = subparsers.add_parser(
         "compare-summaries", help="Compare two summary.csv files and write delta outputs"
     )
     compare_parser.add_argument("old_csv", help="Baseline summary.csv path")
     compare_parser.add_argument("new_csv", help="Current summary.csv path")
     compare_parser.add_argument("--out", default=".", help="Output directory for delta files")
+    manifest_parser = subparsers.add_parser(
+        "plugin-manifest", help="Generate plugin lock manifest (path->sha256)"
+    )
+    manifest_parser.add_argument(
+        "plugins",
+        nargs="+",
+        help="Plugin .py files or directories to include in manifest",
+    )
+    manifest_parser.add_argument(
+        "--out",
+        default="plugins.lock",
+        help="Output lock file path",
+    )
 
     args = parser.parse_args()
 
     if args.command == "scan":
         if args.list_checks:
-            plugin_checks = _resolve_plugins(args.plugins, args.allow_plugins)
+            plugin_checks = _resolve_plugins(
+                args.plugins,
+                args.allow_plugins,
+                allowed_origins=args.allow_plugin_origin,
+                lock_file=args.plugin_lock,
+            )
             rules, _ = load_rules(
                 args.rules, extra_check_ids={spec.check_id for spec in plugin_checks}
             )
@@ -131,6 +171,8 @@ def main() -> None:
             rules_path=args.rules,
             plugin_paths=args.plugins,
             allow_plugins=args.allow_plugins,
+            allowed_origins=args.allow_plugin_origin,
+            plugin_lock=args.plugin_lock,
         )
     elif args.command == "scan-batch":
         _run_scan_batch(
@@ -143,9 +185,13 @@ def main() -> None:
             rules_path=args.rules,
             plugin_paths=args.plugins,
             allow_plugins=args.allow_plugins,
+            allowed_origins=args.allow_plugin_origin,
+            plugin_lock=args.plugin_lock,
         )
     elif args.command == "compare-summaries":
         _run_compare_summaries(args.old_csv, args.new_csv, args.out)
+    elif args.command == "plugin-manifest":
+        _run_plugin_manifest(args.plugins, args.out)
 
 
 def _run_scan(
@@ -155,9 +201,16 @@ def _run_scan(
     rules_path: str | None = None,
     plugin_paths: list[str] | None = None,
     allow_plugins: bool = False,
+    allowed_origins: list[str] | None = None,
+    plugin_lock: str | None = None,
     quiet: bool = False,
 ) -> None:
-    plugin_checks = _resolve_plugins(plugin_paths, allow_plugins)
+    plugin_checks = _resolve_plugins(
+        plugin_paths,
+        allow_plugins,
+        allowed_origins=allowed_origins,
+        lock_file=plugin_lock,
+    )
     rules, rules_source = load_rules(
         rules_path, extra_check_ids={spec.check_id for spec in plugin_checks}
     )
@@ -212,6 +265,8 @@ def _run_scan_batch(
     rules_path: str | None = None,
     plugin_paths: list[str] | None = None,
     allow_plugins: bool = False,
+    allowed_origins: list[str] | None = None,
+    plugin_lock: str | None = None,
     quiet: bool = False,
 ) -> None:
     root = Path(input_dir)
@@ -226,7 +281,12 @@ def _run_scan_batch(
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    plugin_checks = _resolve_plugins(plugin_paths, allow_plugins)
+    plugin_checks = _resolve_plugins(
+        plugin_paths,
+        allow_plugins,
+        allowed_origins=allowed_origins,
+        lock_file=plugin_lock,
+    )
     rules, rules_source = load_rules(
         rules_path, extra_check_ids={spec.check_id for spec in plugin_checks}
     )
@@ -383,10 +443,29 @@ def _emit(message: str, quiet: bool = False) -> None:
         print(message)
 
 
-def _resolve_plugins(plugin_paths: list[str] | None, allow_plugins: bool) -> list[Any]:
-    if plugin_paths and not allow_plugins:
+def _resolve_plugins(
+    plugin_paths: list[str] | None,
+    allow_plugins: bool,
+    allowed_origins: list[str] | None = None,
+    lock_file: str | None = None,
+) -> list[Any]:
+    if (plugin_paths or allowed_origins or lock_file) and not allow_plugins:
         raise ValueError("Refusing to load plugins without --allow-plugins")
-    return load_plugin_checks(plugin_paths if allow_plugins else None)
+    return load_plugin_checks(
+        plugin_paths if allow_plugins else None,
+        allowed_origins=allowed_origins,
+        lock_file=lock_file,
+    )
+
+
+def _run_plugin_manifest(plugin_paths: list[str], out_path: str) -> None:
+    from .plugins import build_plugin_manifest
+
+    manifest = build_plugin_manifest(plugin_paths)
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    print(f"Wrote {out}")
 
 
 def _load_summary_csv(path: str) -> dict[str, dict[str, Any]]:
