@@ -36,6 +36,12 @@ PYTHONPATH=src python3 -m unittest discover -s tests -p 'test_*.py' -q
 
 4. Push your branch and open a PR.
 
+Optional but recommended (one-time setup): install local git hooks to block bad pushes early.
+
+```bash
+./scripts/install-git-hooks.sh
+```
+
 ## Pull Request Guidelines
 
 - Keep PRs focused and small.
