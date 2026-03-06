@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-risk-scanner"
-version = "0.1.0"
-description = "Phase 1 MCP server risk scanner CLI"
+version = "0.2.0"
+description = "Offline-first MCP server risk scanner CLI"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "Codex" }]
+authors = [{ name = "zaiafr" }]
 dependencies = ["PyYAML>=6.0"]
 
 [project.scripts]
