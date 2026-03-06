@@ -1,19 +1,27 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
+from typing import Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .models import ScanInput
 
 
-def collect_input(target: str, timeout_seconds: int = 10) -> ScanInput:
+FetchJsonFn = Callable[[str, int], dict]
+
+
+def collect_input(
+    target: str,
+    timeout_seconds: int = 10,
+    fetch_json: FetchJsonFn | None = None,
+) -> ScanInput:
     target = target.strip()
+    fetch = fetch_json or _fetch_json
     if target.startswith("http://") or target.startswith("https://"):
-        return _from_url(target, timeout_seconds)
+        return _from_url(target, timeout_seconds, fetch)
 
     target_path = Path(target)
     if target_path.exists():
@@ -22,7 +30,7 @@ def collect_input(target: str, timeout_seconds: int = 10) -> ScanInput:
         return _from_file(target_path)
 
     if _looks_like_npm_package(target):
-        return _from_npm(target, timeout_seconds)
+        return _from_npm(target, timeout_seconds, fetch)
 
     raise ValueError(
         "Unsupported target. Provide a local path, URL, or npm package name."
@@ -66,8 +74,8 @@ def _from_directory(path: Path) -> ScanInput:
     )
 
 
-def _from_url(url: str, timeout_seconds: int) -> ScanInput:
-    server_json = _fetch_json(url, timeout_seconds)
+def _from_url(url: str, timeout_seconds: int, fetch_json: FetchJsonFn) -> ScanInput:
+    server_json = fetch_json(url, timeout_seconds)
     return ScanInput(
         target=url,
         source_type="url",
@@ -77,9 +85,9 @@ def _from_url(url: str, timeout_seconds: int) -> ScanInput:
     )
 
 
-def _from_npm(package_name: str, timeout_seconds: int) -> ScanInput:
+def _from_npm(package_name: str, timeout_seconds: int, fetch_json: FetchJsonFn) -> ScanInput:
     metadata_url = f"https://registry.npmjs.org/{package_name}"
-    metadata = _fetch_json(metadata_url, timeout_seconds)
+    metadata = fetch_json(metadata_url, timeout_seconds)
 
     latest_tag = metadata.get("dist-tags", {}).get("latest")
     versions = metadata.get("versions", {})
