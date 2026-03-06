@@ -11,6 +11,12 @@ A narrow MVP scanner that analyzes MCP server metadata and package manifests to 
 python -m mcp_risk_scanner.cli scan ./samples/insecure-server.json --format both --out ./out
 ```
 
+Use custom rules:
+
+```bash
+python -m mcp_risk_scanner.cli scan ./samples --rules ./rules.yml --format both --out ./out
+```
+
 Or install as editable:
 
 ```bash
@@ -73,3 +79,4 @@ Findings are output in deterministic order (severity, then check id) for stable 
 Batch mode also writes `summary.csv` with per-target score/risk rows.
 Use `--fail-on-critical` and `--min-score` for CI-style pass/fail gates.
 `compare-summaries` writes `delta.json` and `delta.md` for release-over-release tracking.
+Rule config file defaults are in `rules.yml`; reports include the applied rules source path.

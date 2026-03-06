@@ -40,3 +40,4 @@ class ScanResult:
     score: int
     risk_level: str
     findings: list[Finding]
+    rules_source: str | None = None

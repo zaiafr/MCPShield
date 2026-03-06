@@ -1,0 +1,29 @@
+# MCP Risk Scanner rules configuration
+# Use this file with: --rules ./rules.yml
+
+checks:
+  # check_id:
+  #   enabled: false
+  # dangerous_tools:
+  #   enabled: true
+
+severity_overrides:
+  # check_id: critical|high|medium|low
+  # missing_docs: medium
+
+thresholds:
+  stale_release_days: 180
+
+keywords:
+  dangerous_tools:
+    - exec
+    - shell
+    - bash
+    - powershell
+    - terminal
+    - filesystem
+    - file write
+    - delete
+    - fetch
+    - http
+    - git_init

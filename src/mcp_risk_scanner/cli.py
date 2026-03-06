@@ -12,6 +12,7 @@ from .checks import run_checks
 from .collector import collect_input
 from .models import Finding, ScanResult
 from .report import render_json, render_markdown
+from .rules import load_rules
 from .scoring import calculate_score
 
 
@@ -31,6 +32,11 @@ def main() -> None:
         "--out",
         default=".",
         help="Output directory for report files",
+    )
+    scan_parser.add_argument(
+        "--rules",
+        default=None,
+        help="Path to rules.yml for check toggles/severity/threshold overrides",
     )
     batch_parser = subparsers.add_parser("scan-batch", help="Scan a directory of local targets")
     batch_parser.add_argument(
@@ -64,6 +70,11 @@ def main() -> None:
         default=None,
         help="Return non-zero if any scanned target score falls below this threshold",
     )
+    batch_parser.add_argument(
+        "--rules",
+        default=None,
+        help="Path to rules.yml for check toggles/severity/threshold overrides",
+    )
     compare_parser = subparsers.add_parser(
         "compare-summaries", help="Compare two summary.csv files and write delta outputs"
     )
@@ -74,7 +85,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "scan":
-        _run_scan(args.target, args.format, args.out)
+        _run_scan(args.target, args.format, args.out, rules_path=args.rules)
     elif args.command == "scan-batch":
         _run_scan_batch(
             args.input_dir,
@@ -83,13 +94,17 @@ def main() -> None:
             summary_only=args.summary_only,
             fail_on_critical=args.fail_on_critical,
             min_score=args.min_score,
+            rules_path=args.rules,
         )
     elif args.command == "compare-summaries":
         _run_compare_summaries(args.old_csv, args.new_csv, args.out)
 
 
-def _run_scan(target: str, output_format: str, out_dir: str) -> None:
-    result = _scan_target(target)
+def _run_scan(
+    target: str, output_format: str, out_dir: str, rules_path: str | None = None
+) -> None:
+    rules, rules_source = load_rules(rules_path)
+    result = _scan_target(target, rules=rules, rules_source=rules_source)
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -98,9 +113,13 @@ def _run_scan(target: str, output_format: str, out_dir: str) -> None:
     print(f"Final score: {result.score}/100 ({result.risk_level})")
 
 
-def _scan_target(target: str) -> ScanResult:
+def _scan_target(
+    target: str,
+    rules: dict[str, Any] | None = None,
+    rules_source: str | None = None,
+) -> ScanResult:
     scan_input = collect_input(target)
-    findings = _sort_findings(run_checks(scan_input))
+    findings = _sort_findings(run_checks(scan_input, rules))
     score, risk_level = calculate_score(findings)
     return ScanResult(
         target=scan_input.target,
@@ -108,6 +127,7 @@ def _scan_target(target: str) -> ScanResult:
         score=score,
         risk_level=risk_level,
         findings=findings,
+        rules_source=rules_source,
     )
 
 
@@ -118,6 +138,7 @@ def _run_scan_batch(
     summary_only: bool = False,
     fail_on_critical: bool = False,
     min_score: float | None = None,
+    rules_path: str | None = None,
 ) -> None:
     root = Path(input_dir)
     if not root.exists() or not root.is_dir():
@@ -131,10 +152,11 @@ def _run_scan_batch(
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    rules, rules_source = load_rules(rules_path)
 
     results: list[ScanResult] = []
     for target in targets:
-        result = _scan_target(str(target))
+        result = _scan_target(str(target), rules=rules, rules_source=rules_source)
         results.append(result)
         if not summary_only:
             _write_result_files(result, output_format, out, _safe_stem(target.name))

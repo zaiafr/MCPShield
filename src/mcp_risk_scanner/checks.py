@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import Finding, ScanInput
+from .rules import default_rules
 
 
 DANGEROUS_KEYWORDS = {
@@ -46,9 +47,15 @@ KNOWN_VULNERABLE_PACKAGES = [
 ]
 
 
-def run_checks(scan_input: ScanInput) -> list[Finding]:
+def run_checks(scan_input: ScanInput, rules: dict[str, Any] | None = None) -> list[Finding]:
+    active_rules = rules or default_rules()
+    dangerous_keywords = active_rules.get("keywords", {}).get(
+        "dangerous_tools", list(DANGEROUS_KEYWORDS.keys())
+    )
+    stale_days = int(active_rules.get("thresholds", {}).get("stale_release_days", 180))
+
     findings: list[Finding] = []
-    findings.extend(_check_dangerous_tools(scan_input.server_json))
+    findings.extend(_check_dangerous_tools(scan_input.server_json, dangerous_keywords))
     findings.extend(_check_runtime_command(scan_input.server_json))
     findings.extend(_check_ssrf_hint(scan_input.server_json))
     findings.extend(_check_missing_network_allowlist(scan_input.server_json))
@@ -59,14 +66,16 @@ def run_checks(scan_input: ScanInput) -> list[Finding]:
     findings.extend(_check_least_privilege_metadata(scan_input.server_json))
     findings.extend(_check_tenant_isolation_metadata(scan_input.server_json))
     findings.extend(_check_audit_logging_metadata(scan_input.server_json))
-    findings.extend(_check_stale_release(scan_input.server_json))
+    findings.extend(_check_stale_release(scan_input.server_json, stale_days))
     findings.extend(_check_dependencies(scan_input.package_json))
     findings.extend(_check_security_metadata(scan_input.server_json))
     findings.extend(_check_local_hygiene(scan_input.root_dir))
+    findings = [f for f in findings if _check_enabled(f.check_id, active_rules)]
+    _apply_severity_overrides(findings, active_rules)
     return findings
 
 
-def _check_dangerous_tools(server_json: dict[str, Any]) -> list[Finding]:
+def _check_dangerous_tools(server_json: dict[str, Any], keywords: list[str]) -> list[Finding]:
     findings: list[Finding] = []
     tools = server_json.get("tools", [])
     if not isinstance(tools, list):
@@ -79,7 +88,7 @@ def _check_dangerous_tools(server_json: dict[str, Any]) -> list[Finding]:
         blob = " ".join(
             str(v).lower() for v in [tool.get("name", ""), tool.get("description", "")]
         )
-        if any(keyword in blob for keyword in DANGEROUS_KEYWORDS):
+        if any(keyword in blob for keyword in keywords):
             hit_tools.append(str(tool.get("name", "unknown")))
 
     if hit_tools:
@@ -382,7 +391,7 @@ def _check_audit_logging_metadata(server_json: dict[str, Any]) -> list[Finding]:
     return findings
 
 
-def _check_stale_release(server_json: dict[str, Any]) -> list[Finding]:
+def _check_stale_release(server_json: dict[str, Any], stale_days: int) -> list[Finding]:
     findings: list[Finding] = []
     raw_release = server_json.get("releaseDate") or server_json.get("updatedAt")
     if not raw_release or not isinstance(raw_release, str):
@@ -392,7 +401,7 @@ def _check_stale_release(server_json: dict[str, Any]) -> list[Finding]:
     if not parsed:
         return findings
 
-    stale_after = datetime.now(timezone.utc) - timedelta(days=180)
+    stale_after = datetime.now(timezone.utc) - timedelta(days=stale_days)
     if parsed < stale_after:
         findings.append(
             Finding(
@@ -554,3 +563,25 @@ def _parse_iso_datetime(raw: str) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _check_enabled(check_id: str, rules: dict[str, Any]) -> bool:
+    checks = rules.get("checks", {})
+    if not isinstance(checks, dict):
+        return True
+    check = checks.get(check_id, {})
+    if not isinstance(check, dict):
+        return True
+    enabled = check.get("enabled", True)
+    return bool(enabled)
+
+
+def _apply_severity_overrides(findings: list[Finding], rules: dict[str, Any]) -> None:
+    overrides = rules.get("severity_overrides", {})
+    if not isinstance(overrides, dict):
+        return
+    valid = {"critical", "high", "medium", "low"}
+    for finding in findings:
+        override = overrides.get(finding.check_id)
+        if isinstance(override, str) and override.lower() in valid:
+            finding.severity = override.lower()

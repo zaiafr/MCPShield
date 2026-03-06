@@ -10,6 +10,7 @@ def render_json(result: ScanResult) -> str:
     payload = {
         "target": result.target,
         "source_type": result.source_type,
+        "rules_source": result.rules_source,
         "score": result.score,
         "risk_level": result.risk_level,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -35,6 +36,7 @@ def render_markdown(result: ScanResult) -> str:
         "",
         f"- Target: `{result.target}`",
         f"- Source: `{result.source_type}`",
+        f"- Rules: `{result.rules_source or 'default'}`",
         f"- Score: **{result.score}/100**",
         f"- Risk Level: **{result.risk_level.upper()}**",
         "",
