@@ -46,7 +46,7 @@ def build_plugin_manifest(plugin_paths: list[str]) -> dict[str, str]:
     files = _expand_plugin_files(plugin_paths)
     manifest: dict[str, str] = {}
     for file_path in files:
-        manifest[str(file_path.resolve())] = _sha256_file(file_path)
+        manifest[_manifest_key(file_path)] = _sha256_file(file_path)
     return manifest
 
 
@@ -96,13 +96,19 @@ def _validate_lock_file(files: list[Path], lock_file: str | None) -> None:
         raise ValueError("Plugin lock file must contain a JSON object mapping path->sha256")
 
     for file_path in files:
-        key = str(file_path.resolve())
-        expected = lock_payload.get(key)
+        relative_key = _manifest_key(file_path)
+        absolute_key = str(file_path.resolve())
+        expected = lock_payload.get(relative_key)
         if not isinstance(expected, str):
-            raise ValueError(f"Missing plugin hash in lock file for: {key}")
+            expected = lock_payload.get(absolute_key)
+        if not isinstance(expected, str):
+            raise ValueError(
+                "Missing plugin hash in lock file for: "
+                f"{relative_key} (or legacy key {absolute_key})"
+            )
         actual = _sha256_file(file_path)
         if actual != expected:
-            raise ValueError(f"Plugin hash mismatch for {key}")
+            raise ValueError(f"Plugin hash mismatch for {relative_key}")
 
 
 def _sha256_file(path: Path) -> str:
@@ -122,6 +128,16 @@ def _is_relative_to(path: Path, prefix: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _manifest_key(path: Path) -> str:
+    absolute = path.resolve()
+    cwd = Path.cwd().resolve()
+    try:
+        rel = absolute.relative_to(cwd)
+        return rel.as_posix()
+    except ValueError:
+        return str(absolute)
 
 
 def _load_module_from_file(path: Path) -> ModuleType:
