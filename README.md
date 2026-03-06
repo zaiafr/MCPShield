@@ -28,8 +28,10 @@ mcp-risk-scan scan ./samples/insecure-server.json --format both --out ./out
 - Known vulnerable dependency versions (small built-in advisory set)
 - Dangerous tool/capability keywords
 - Potentially dangerous runtime commands
+- Token passthrough behavior hints
 - Missing auth metadata
 - Overly broad OAuth scopes
+- Stale release metadata (older than 180 days)
 - Unpinned dependencies (`*`, `latest`, broad ranges)
 - Missing security metadata
 - Missing changelog/security policy files (local directory scans)

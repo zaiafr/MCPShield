@@ -67,6 +67,42 @@ class ScannerTests(unittest.TestCase):
             self.assertLess(score, 100)
             self.assertIn(level, {"medium", "high", "critical", "low"})
 
+    def test_detects_token_passthrough_hint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "x",
+                        "tools": [],
+                        "description": "Proxy that forwards bearer token to upstream APIs",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            scan_input = collect_input(str(d))
+            findings = run_checks(scan_input)
+            ids = {f.check_id for f in findings}
+            self.assertIn("token_passthrough_hint", ids)
+
+    def test_detects_stale_release_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "x",
+                        "tools": [],
+                        "releaseDate": "2000-01-01T00:00:00Z",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            scan_input = collect_input(str(d))
+            findings = run_checks(scan_input)
+            ids = {f.check_id for f in findings}
+            self.assertIn("stale_release", ids)
+
 
 if __name__ == "__main__":
     unittest.main()

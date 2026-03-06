@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -49,8 +50,10 @@ def run_checks(scan_input: ScanInput) -> list[Finding]:
     findings: list[Finding] = []
     findings.extend(_check_dangerous_tools(scan_input.server_json))
     findings.extend(_check_runtime_command(scan_input.server_json))
+    findings.extend(_check_token_passthrough_hint(scan_input.server_json))
     findings.extend(_check_auth_presence(scan_input.server_json))
     findings.extend(_check_broad_scopes(scan_input.server_json))
+    findings.extend(_check_stale_release(scan_input.server_json))
     findings.extend(_check_dependencies(scan_input.package_json))
     findings.extend(_check_security_metadata(scan_input.server_json))
     findings.extend(_check_local_hygiene(scan_input.root_dir))
@@ -133,6 +136,48 @@ def _check_auth_presence(server_json: dict[str, Any]) -> list[Finding]:
     return findings
 
 
+def _check_token_passthrough_hint(server_json: dict[str, Any]) -> list[Finding]:
+    findings: list[Finding] = []
+    blob_parts = [
+        str(server_json.get("name", "")),
+        str(server_json.get("description", "")),
+        str(server_json.get("auth", "")),
+        str(server_json.get("oauth", "")),
+        str(server_json.get("security", "")),
+    ]
+    for tool in server_json.get("tools", []):
+        if isinstance(tool, dict):
+            blob_parts.append(str(tool.get("name", "")))
+            blob_parts.append(str(tool.get("description", "")))
+
+    blob = " ".join(blob_parts).lower()
+    hints = [
+        "token passthrough",
+        "pass through token",
+        "forward bearer token",
+        "forwards bearer token",
+        "forward access token",
+        "forwards access token",
+    ]
+    matched = [hint for hint in hints if hint in blob]
+    if matched:
+        findings.append(
+            Finding(
+                check_id="token_passthrough_hint",
+                title="Potential token passthrough behavior",
+                severity="high",
+                category="auth",
+                message="Metadata suggests upstream calls may forward user tokens directly.",
+                evidence=f"Matched hints: {', '.join(matched)}",
+                remediation=(
+                    "Avoid token passthrough. Exchange for scoped tokens, enforce audience checks, "
+                    "and isolate tokens per upstream service."
+                ),
+            )
+        )
+    return findings
+
+
 def _check_broad_scopes(server_json: dict[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
     auth_blob = str(server_json.get("auth", "")) + " " + str(server_json.get("oauth", ""))
@@ -149,6 +194,32 @@ def _check_broad_scopes(server_json: dict[str, Any]) -> list[Finding]:
                 message="Auth metadata appears to include broad privilege scopes.",
                 evidence=f"Matched scope markers: {', '.join(matches)}",
                 remediation="Split scopes by action/resource and default to least privilege.",
+            )
+        )
+    return findings
+
+
+def _check_stale_release(server_json: dict[str, Any]) -> list[Finding]:
+    findings: list[Finding] = []
+    raw_release = server_json.get("releaseDate") or server_json.get("updatedAt")
+    if not raw_release or not isinstance(raw_release, str):
+        return findings
+
+    parsed = _parse_iso_datetime(raw_release)
+    if not parsed:
+        return findings
+
+    stale_after = datetime.now(timezone.utc) - timedelta(days=180)
+    if parsed < stale_after:
+        findings.append(
+            Finding(
+                check_id="stale_release",
+                title="Stale release metadata",
+                severity="medium",
+                category="maintenance",
+                message="Server metadata appears older than 180 days.",
+                evidence=f"releaseDate/updatedAt: {raw_release}",
+                remediation="Review compatibility with current MCP spec and publish an updated release.",
             )
         )
     return findings
@@ -286,3 +357,17 @@ def _extract_version_numbers(raw: str) -> list[int]:
             return []
         numbers.append(int(part))
     return numbers
+
+
+def _parse_iso_datetime(raw: str) -> datetime | None:
+    value = raw.strip()
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
