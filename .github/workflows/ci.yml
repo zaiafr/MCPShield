@@ -43,3 +43,15 @@ jobs:
           PYTHONPATH: src
         run: |
           python -m mcp_risk_scanner.cli scan-batch ./fixtures/ci-safe --summary-only --out /tmp/mcp-ci --fail-on-critical --min-score 80
+
+      - name: Run plugin trust-path fixture
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m mcp_risk_scanner.cli scan-batch ./fixtures/ci-safe \
+            --summary-only \
+            --out /tmp/mcp-ci-plugin \
+            --allow-plugins \
+            --plugins ./plugins/trusted \
+            --allow-plugin-origin ./plugins/trusted \
+            --plugin-lock ./plugins.lock

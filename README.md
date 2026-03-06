@@ -42,6 +42,8 @@ Generate plugin lock manifest:
 python -m mcp_risk_scanner.cli plugin-manifest ./plugins --out ./plugins.lock
 ```
 
+This repo includes a committed `plugins.lock` for trusted plugin CI runs.
+
 Or install as editable:
 
 ```bash
