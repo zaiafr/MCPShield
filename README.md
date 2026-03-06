@@ -32,8 +32,8 @@ python -m mcp_risk_scanner.cli scan --list-checks --rules ./rules.yml
 Load custom plugin checks:
 
 ```bash
-python -m mcp_risk_scanner.cli scan ./samples --plugins ./plugins/my_checks.py --out ./out
-python -m mcp_risk_scanner.cli scan-batch ./fixtures --plugins ./plugins --summary-only --out ./out
+python -m mcp_risk_scanner.cli scan ./samples --plugins ./plugins/my_checks.py --allow-plugins --out ./out
+python -m mcp_risk_scanner.cli scan-batch ./fixtures --plugins ./plugins --allow-plugins --summary-only --out ./out
 ```
 
 Or install as editable:
@@ -103,3 +103,5 @@ Rules validation rejects unknown `check_id`s in `checks` and `severity_overrides
 Rules parsing uses `PyYAML` (`yaml.safe_load`) with clear validation errors.
 Plugin checks can be provided via `CHECKS` (or `get_checks()`) as dict entries:
 `check_id`, `default_severity`, `runner`.
+Plugin loading is opt-in (`--allow-plugins`), enforces check_id namespace
+(`plugin_` or `<module>_`), and isolates plugin failures/timeouts into findings.

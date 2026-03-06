@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import importlib.util
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 from .checks import CheckSpec
+from .models import Finding
+
+
+PLUGIN_RUNNER_TIMEOUT_SECONDS = 1.0
 
 
 def load_plugin_checks(plugin_paths: list[str] | None) -> list[CheckSpec]:
@@ -97,4 +102,89 @@ def _to_check_spec(entry: Any, source: Path) -> CheckSpec:
     if sev not in {"critical", "high", "medium", "low"}:
         raise ValueError(f"Invalid plugin severity '{default_severity}' in {source}")
 
-    return CheckSpec(check_id=check_id, default_severity=sev, runner=runner)
+    module_prefix = _module_prefix(source)
+    if not (check_id.startswith("plugin_") or check_id.startswith(f"{module_prefix}_")):
+        raise ValueError(
+            f"Plugin check_id '{check_id}' must start with 'plugin_' or '{module_prefix}_'"
+        )
+
+    return CheckSpec(
+        check_id=check_id,
+        default_severity=sev,
+        runner=_wrap_safe_runner(check_id, runner),
+    )
+
+
+def _module_prefix(source: Path) -> str:
+    raw = source.stem.lower()
+    return "".join(ch if ch.isalnum() else "_" for ch in raw)
+
+
+def _wrap_safe_runner(check_id: str, runner: Any):
+    def safe_runner(scan_input):
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(runner, scan_input)
+            try:
+                result = future.result(timeout=PLUGIN_RUNNER_TIMEOUT_SECONDS)
+            except FuturesTimeoutError:
+                return [
+                    Finding(
+                        check_id=check_id,
+                        title="Plugin check timed out",
+                        severity="medium",
+                        category="plugin",
+                        message="Plugin check exceeded execution timeout.",
+                        evidence=f"timeout={PLUGIN_RUNNER_TIMEOUT_SECONDS}s",
+                        remediation="Reduce plugin runtime or optimize the check logic.",
+                        evidence_data={"error": "timeout"},
+                    )
+                ]
+            except Exception as exc:  # noqa: BLE001
+                return [
+                    Finding(
+                        check_id=check_id,
+                        title="Plugin check failed",
+                        severity="medium",
+                        category="plugin",
+                        message="Plugin check raised an exception.",
+                        evidence=f"{type(exc).__name__}: {exc}",
+                        remediation="Fix plugin implementation or disable the plugin check.",
+                        evidence_data={"error": "exception", "exception_type": type(exc).__name__},
+                    )
+                ]
+
+        if not isinstance(result, list):
+            return [
+                Finding(
+                    check_id=check_id,
+                    title="Plugin check returned invalid result",
+                    severity="medium",
+                    category="plugin",
+                    message="Plugin check must return a list of Finding objects.",
+                    evidence=f"received_type={type(result).__name__}",
+                    remediation="Update plugin runner to return list[Finding].",
+                    evidence_data={"error": "invalid_return_type"},
+                )
+            ]
+
+        normalized: list[Finding] = []
+        for item in result:
+            if isinstance(item, Finding):
+                normalized.append(item)
+            else:
+                normalized.append(
+                    Finding(
+                        check_id=check_id,
+                        title="Plugin check returned invalid finding item",
+                        severity="medium",
+                        category="plugin",
+                        message="Plugin returned a non-Finding item.",
+                        evidence=f"item_type={type(item).__name__}",
+                        remediation="Ensure each item in plugin result is a Finding.",
+                        evidence_data={"error": "invalid_finding_item"},
+                    )
+                )
+                break
+        return normalized
+
+    return safe_runner

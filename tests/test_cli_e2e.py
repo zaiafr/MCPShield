@@ -92,6 +92,49 @@ class CliE2ETests(unittest.TestCase):
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("scan target is required", proc.stderr)
 
+    def test_plugins_require_explicit_allow_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "target"
+            target.mkdir()
+            (target / "server.json").write_text(
+                json.dumps({"name": "x", "tools": []}), encoding="utf-8"
+            )
+            plugin = root / "plugin_ok.py"
+            plugin.write_text(
+                """
+def check(scan_input):
+    return []
+
+CHECKS = [
+    {
+        "check_id": "plugin_ok_check",
+        "default_severity": "low",
+        "runner": check,
+    }
+]
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            denied = self._run("scan", str(target), "--plugins", str(plugin))
+            self.assertNotEqual(denied.returncode, 0)
+            self.assertIn("Refusing to load plugins without --allow-plugins", denied.stderr)
+
+            allowed = self._run(
+                "scan",
+                str(target),
+                "--plugins",
+                str(plugin),
+                "--allow-plugins",
+                "--format",
+                "json",
+                "--out",
+                str(root / "out"),
+            )
+            self.assertEqual(allowed.returncode, 0, msg=allowed.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

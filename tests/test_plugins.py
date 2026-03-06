@@ -1,5 +1,6 @@
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -123,6 +124,101 @@ CHECKS = [
             plugin_checks = load_plugin_checks([str(plugin_file)])
             ids = known_check_ids(extra_checks=plugin_checks)
             self.assertIn("plugin_three_check", ids)
+
+    def test_plugin_check_id_namespace_enforced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plugin_file = root / "custom.py"
+            plugin_file.write_text(
+                """
+def check(scan_input):
+    return []
+
+CHECKS = [
+    {
+        "check_id": "badname",
+        "default_severity": "low",
+        "runner": check,
+    }
+]
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError):
+                load_plugin_checks([str(plugin_file)])
+
+    def test_plugin_exception_isolated_to_finding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plugin_file = root / "plugin_boom.py"
+            plugin_file.write_text(
+                """
+def check(scan_input):
+    raise RuntimeError("boom")
+
+CHECKS = [
+    {
+        "check_id": "plugin_boom_check",
+        "default_severity": "low",
+        "runner": check,
+    }
+]
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            plugin_checks = load_plugin_checks([str(plugin_file)])
+
+            target = root / "target"
+            target.mkdir()
+            (target / "server.json").write_text(
+                json.dumps({"name": "x", "tools": []}), encoding="utf-8"
+            )
+            scan_input = collect_input(str(target))
+            findings = run_checks(scan_input, extra_checks=plugin_checks)
+            match = [f for f in findings if f.check_id == "plugin_boom_check"]
+            self.assertEqual(len(match), 1)
+            self.assertIn("raised an exception", match[0].message)
+
+    def test_plugin_timeout_isolated_to_finding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plugin_file = root / "plugin_slow.py"
+            plugin_file.write_text(
+                """
+import time
+
+def check(scan_input):
+    time.sleep(1.2)
+    return []
+
+CHECKS = [
+    {
+        "check_id": "plugin_slow_check",
+        "default_severity": "low",
+        "runner": check,
+    }
+]
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            plugin_checks = load_plugin_checks([str(plugin_file)])
+
+            target = root / "target"
+            target.mkdir()
+            (target / "server.json").write_text(
+                json.dumps({"name": "x", "tools": []}), encoding="utf-8"
+            )
+            scan_input = collect_input(str(target))
+            start = time.time()
+            findings = run_checks(scan_input, extra_checks=plugin_checks)
+            elapsed = time.time() - start
+            self.assertLess(elapsed, 2.5)
+            match = [f for f in findings if f.check_id == "plugin_slow_check"]
+            self.assertEqual(len(match), 1)
+            self.assertIn("timed out", match[0].title.lower())
 
 
 if __name__ == "__main__":

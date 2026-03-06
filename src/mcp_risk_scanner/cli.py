@@ -48,6 +48,11 @@ def main() -> None:
         help="Plugin .py files or directories containing plugin checks",
     )
     scan_parser.add_argument(
+        "--allow-plugins",
+        action="store_true",
+        help="Explicitly allow loading and executing plugin checks",
+    )
+    scan_parser.add_argument(
         "--list-checks",
         action="store_true",
         help="List available checks and exit",
@@ -95,6 +100,11 @@ def main() -> None:
         default=None,
         help="Plugin .py files or directories containing plugin checks",
     )
+    batch_parser.add_argument(
+        "--allow-plugins",
+        action="store_true",
+        help="Explicitly allow loading and executing plugin checks",
+    )
     compare_parser = subparsers.add_parser(
         "compare-summaries", help="Compare two summary.csv files and write delta outputs"
     )
@@ -106,7 +116,7 @@ def main() -> None:
 
     if args.command == "scan":
         if args.list_checks:
-            plugin_checks = load_plugin_checks(args.plugins)
+            plugin_checks = _resolve_plugins(args.plugins, args.allow_plugins)
             rules, _ = load_rules(
                 args.rules, extra_check_ids={spec.check_id for spec in plugin_checks}
             )
@@ -120,6 +130,7 @@ def main() -> None:
             args.out,
             rules_path=args.rules,
             plugin_paths=args.plugins,
+            allow_plugins=args.allow_plugins,
         )
     elif args.command == "scan-batch":
         _run_scan_batch(
@@ -131,6 +142,7 @@ def main() -> None:
             min_score=args.min_score,
             rules_path=args.rules,
             plugin_paths=args.plugins,
+            allow_plugins=args.allow_plugins,
         )
     elif args.command == "compare-summaries":
         _run_compare_summaries(args.old_csv, args.new_csv, args.out)
@@ -142,9 +154,10 @@ def _run_scan(
     out_dir: str,
     rules_path: str | None = None,
     plugin_paths: list[str] | None = None,
+    allow_plugins: bool = False,
     quiet: bool = False,
 ) -> None:
-    plugin_checks = load_plugin_checks(plugin_paths)
+    plugin_checks = _resolve_plugins(plugin_paths, allow_plugins)
     rules, rules_source = load_rules(
         rules_path, extra_check_ids={spec.check_id for spec in plugin_checks}
     )
@@ -198,6 +211,7 @@ def _run_scan_batch(
     min_score: float | None = None,
     rules_path: str | None = None,
     plugin_paths: list[str] | None = None,
+    allow_plugins: bool = False,
     quiet: bool = False,
 ) -> None:
     root = Path(input_dir)
@@ -212,7 +226,7 @@ def _run_scan_batch(
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    plugin_checks = load_plugin_checks(plugin_paths)
+    plugin_checks = _resolve_plugins(plugin_paths, allow_plugins)
     rules, rules_source = load_rules(
         rules_path, extra_check_ids={spec.check_id for spec in plugin_checks}
     )
@@ -367,6 +381,12 @@ def _run_compare_summaries(
 def _emit(message: str, quiet: bool = False) -> None:
     if not quiet:
         print(message)
+
+
+def _resolve_plugins(plugin_paths: list[str] | None, allow_plugins: bool) -> list[Any]:
+    if plugin_paths and not allow_plugins:
+        raise ValueError("Refusing to load plugins without --allow-plugins")
+    return load_plugin_checks(plugin_paths if allow_plugins else None)
 
 
 def _load_summary_csv(path: str) -> dict[str, dict[str, Any]]:
