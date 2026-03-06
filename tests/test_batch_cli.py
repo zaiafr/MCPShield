@@ -189,6 +189,54 @@ class BatchCliTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 cli._run_scan_batch(str(fixtures), "json", str(out), min_score=80)
 
+    def test_compare_summaries_writes_delta_json_and_md(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old_csv = root / "old.csv"
+            new_csv = root / "new.csv"
+            out = root / "out"
+            out.mkdir()
+
+            old_csv.write_text(
+                "\n".join(
+                    [
+                        "target,score,risk_level,findings_count",
+                        "alpha,60,high,5",
+                        "beta,90,low,1",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            new_csv.write_text(
+                "\n".join(
+                    [
+                        "target,score,risk_level,findings_count",
+                        "alpha,80,medium,2",
+                        "gamma,50,high,4",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            cli._run_compare_summaries(str(old_csv), str(new_csv), str(out))
+
+            self.assertTrue((out / "delta.json").exists())
+            self.assertTrue((out / "delta.md").exists())
+
+            delta = json.loads((out / "delta.json").read_text(encoding="utf-8"))
+            self.assertEqual(delta["targets_compared"], 3)
+            self.assertEqual(delta["regressions_count"], 1)
+            self.assertEqual(delta["improvements_count"], 1)
+            self.assertEqual(delta["new_targets_count"], 1)
+            self.assertEqual(delta["removed_targets_count"], 1)
+
+            md = (out / "delta.md").read_text(encoding="utf-8")
+            self.assertIn("alpha", md)
+            self.assertIn("gamma", md)
+            self.assertIn("beta", md)
+
     def test_scan_target_returns_findings_in_deterministic_order(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)

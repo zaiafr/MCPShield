@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import sys
 from collections import Counter
+from typing import Any
 
 from .checks import run_checks
 from .collector import collect_input
@@ -63,6 +64,12 @@ def main() -> None:
         default=None,
         help="Return non-zero if any scanned target score falls below this threshold",
     )
+    compare_parser = subparsers.add_parser(
+        "compare-summaries", help="Compare two summary.csv files and write delta outputs"
+    )
+    compare_parser.add_argument("old_csv", help="Baseline summary.csv path")
+    compare_parser.add_argument("new_csv", help="Current summary.csv path")
+    compare_parser.add_argument("--out", default=".", help="Output directory for delta files")
 
     args = parser.parse_args()
 
@@ -77,6 +84,8 @@ def main() -> None:
             fail_on_critical=args.fail_on_critical,
             min_score=args.min_score,
         )
+    elif args.command == "compare-summaries":
+        _run_compare_summaries(args.old_csv, args.new_csv, args.out)
 
 
 def _run_scan(target: str, output_format: str, out_dir: str) -> None:
@@ -243,6 +252,145 @@ def _render_summary_csv(results: list[ScanResult]) -> str:
     writer = csv.writer(buf, lineterminator="\n")
     writer.writerows(rows)
     return buf.getvalue()
+
+
+def _run_compare_summaries(old_csv: str, new_csv: str, out_dir: str) -> None:
+    old_rows = _load_summary_csv(old_csv)
+    new_rows = _load_summary_csv(new_csv)
+    delta = _build_delta(old_rows, new_rows)
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    delta_json_path = out / "delta.json"
+    delta_json_path.write_text(json.dumps(delta, indent=2), encoding="utf-8")
+    print(f"Wrote {delta_json_path}")
+
+    delta_md_path = out / "delta.md"
+    delta_md_path.write_text(_render_delta_markdown(delta), encoding="utf-8")
+    print(f"Wrote {delta_md_path}")
+
+
+def _load_summary_csv(path: str) -> dict[str, dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
+    with Path(path).open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        required = {"target", "score", "risk_level", "findings_count"}
+        if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
+            raise ValueError(f"Invalid summary CSV header in {path}")
+        for row in reader:
+            target = str(row["target"])
+            rows[target] = {
+                "score": float(row["score"]),
+                "risk_level": str(row["risk_level"]),
+                "findings_count": int(row["findings_count"]),
+            }
+    return rows
+
+
+def _build_delta(
+    old_rows: dict[str, dict[str, Any]], new_rows: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    all_targets = sorted(set(old_rows) | set(new_rows))
+    changes: list[dict[str, Any]] = []
+    regressions = 0
+    improvements = 0
+    new_targets = 0
+    removed_targets = 0
+
+    for target in all_targets:
+        old = old_rows.get(target)
+        new = new_rows.get(target)
+        if old is None and new is not None:
+            new_targets += 1
+            regressions += 1 if _risk_rank(new["risk_level"]) >= _risk_rank("high") else 0
+            changes.append(
+                {
+                    "target": target,
+                    "status": "new",
+                    "score_delta": None,
+                    "risk_change": f"none -> {new['risk_level']}",
+                    "old": None,
+                    "new": new,
+                }
+            )
+            continue
+        if old is not None and new is None:
+            removed_targets += 1
+            changes.append(
+                {
+                    "target": target,
+                    "status": "removed",
+                    "score_delta": None,
+                    "risk_change": f"{old['risk_level']} -> none",
+                    "old": old,
+                    "new": None,
+                }
+            )
+            continue
+
+        assert old is not None and new is not None
+        score_delta = round(new["score"] - old["score"], 2)
+        old_rank = _risk_rank(old["risk_level"])
+        new_rank = _risk_rank(new["risk_level"])
+        status = "unchanged"
+        if new_rank < old_rank or score_delta > 0:
+            improvements += 1
+            status = "improved"
+        elif new_rank > old_rank or score_delta < 0:
+            regressions += 1
+            status = "regressed"
+
+        changes.append(
+            {
+                "target": target,
+                "status": status,
+                "score_delta": score_delta,
+                "risk_change": f"{old['risk_level']} -> {new['risk_level']}",
+                "old": old,
+                "new": new,
+            }
+        )
+
+    return {
+        "targets_compared": len(all_targets),
+        "regressions_count": regressions,
+        "improvements_count": improvements,
+        "new_targets_count": new_targets,
+        "removed_targets_count": removed_targets,
+        "changes": changes,
+    }
+
+
+def _render_delta_markdown(delta: dict[str, Any]) -> str:
+    lines = [
+        "# MCP Summary Delta",
+        "",
+        f"- Targets compared: **{delta['targets_compared']}**",
+        f"- Improvements: **{delta['improvements_count']}**",
+        f"- Regressions: **{delta['regressions_count']}**",
+        f"- New targets: **{delta['new_targets_count']}**",
+        f"- Removed targets: **{delta['removed_targets_count']}**",
+        "",
+        "## Changes",
+        "",
+        "| Target | Status | Score Delta | Risk Change |",
+        "|---|---|---|---|",
+    ]
+    for change in delta["changes"]:
+        score_delta = (
+            "n/a" if change["score_delta"] is None else f"{change['score_delta']:+.2f}"
+        )
+        lines.append(
+            f"| {change['target']} | {change['status']} | {score_delta} | {change['risk_change']} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _risk_rank(level: str) -> int:
+    ranks = {"critical": 4, "high": 3, "medium": 2, "low": 1, "none": 0}
+    return ranks.get(level, 0)
 
 
 def _safe_stem(target: str) -> str:
