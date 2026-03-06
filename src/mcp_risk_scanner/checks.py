@@ -50,6 +50,8 @@ def run_checks(scan_input: ScanInput) -> list[Finding]:
     findings: list[Finding] = []
     findings.extend(_check_dangerous_tools(scan_input.server_json))
     findings.extend(_check_runtime_command(scan_input.server_json))
+    findings.extend(_check_ssrf_hint(scan_input.server_json))
+    findings.extend(_check_missing_network_allowlist(scan_input.server_json))
     findings.extend(_check_token_passthrough_hint(scan_input.server_json))
     findings.extend(_check_auth_presence(scan_input.server_json))
     findings.extend(_check_broad_scopes(scan_input.server_json))
@@ -115,6 +117,72 @@ def _check_runtime_command(server_json: dict[str, Any]) -> list[Finding]:
             )
         )
 
+    return findings
+
+
+def _check_ssrf_hint(server_json: dict[str, Any]) -> list[Finding]:
+    findings: list[Finding] = []
+    risky_patterns = ["any url", "arbitrary url", "user input url", "fetch url"]
+    tools = server_json.get("tools", [])
+    matched_tools: list[str] = []
+    if isinstance(tools, list):
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            blob = " ".join(
+                [str(tool.get("name", "")).lower(), str(tool.get("description", "")).lower()]
+            )
+            if any(pat in blob for pat in risky_patterns):
+                matched_tools.append(str(tool.get("name", "unknown")))
+
+    if matched_tools:
+        findings.append(
+            Finding(
+                check_id="ssrf_hint",
+                title="Possible SSRF-prone URL fetching behavior",
+                severity="high",
+                category="network",
+                message="Tool metadata suggests untrusted URL fetching from user-controlled input.",
+                evidence=f"Tools: {', '.join(matched_tools)}",
+                remediation="Validate URLs strictly and block internal/private network destinations.",
+            )
+        )
+    return findings
+
+
+def _check_missing_network_allowlist(server_json: dict[str, Any]) -> list[Finding]:
+    findings: list[Finding] = []
+    tools = server_json.get("tools", [])
+    if not isinstance(tools, list):
+        return findings
+
+    network_tool_detected = False
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        blob = " ".join(
+            [str(tool.get("name", "")).lower(), str(tool.get("description", "")).lower()]
+        )
+        if any(term in blob for term in ["http", "network", "fetch", "proxy", "url"]):
+            network_tool_detected = True
+            break
+
+    if not network_tool_detected:
+        return findings
+
+    allowlist = server_json.get("networkAllowlist") or server_json.get("allowedHosts")
+    if not allowlist:
+        findings.append(
+            Finding(
+                check_id="missing_network_allowlist",
+                title="Missing outbound network allowlist",
+                severity="medium",
+                category="network",
+                message="Network-capable tools detected without host/domain allowlist metadata.",
+                evidence="No networkAllowlist or allowedHosts field found",
+                remediation="Define explicit outbound host allowlists and block all other destinations.",
+            )
+        )
     return findings
 
 

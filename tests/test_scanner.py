@@ -103,6 +103,50 @@ class ScannerTests(unittest.TestCase):
             ids = {f.check_id for f in findings}
             self.assertIn("stale_release", ids)
 
+    def test_detects_ssrf_hint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "x",
+                        "tools": [
+                            {
+                                "name": "fetch_url",
+                                "description": "Fetch any URL provided by user input",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            scan_input = collect_input(str(d))
+            findings = run_checks(scan_input)
+            ids = {f.check_id for f in findings}
+            self.assertIn("ssrf_hint", ids)
+
+    def test_detects_missing_network_allowlist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "x",
+                        "tools": [
+                            {
+                                "name": "http_proxy",
+                                "description": "Perform network requests",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            scan_input = collect_input(str(d))
+            findings = run_checks(scan_input)
+            ids = {f.check_id for f in findings}
+            self.assertIn("missing_network_allowlist", ids)
+
 
 if __name__ == "__main__":
     unittest.main()
