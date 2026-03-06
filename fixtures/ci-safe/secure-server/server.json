@@ -1,0 +1,13 @@
+{
+  "name": "secure-server",
+  "description": "CI safe fixture",
+  "oauth": {
+    "scopes": ["read:data"],
+    "leastPrivilege": true,
+    "tenantIsolation": true,
+    "auditLog": true
+  },
+  "securityPolicy": "https://example.invalid/security",
+  "contact": "security@example.invalid",
+  "tools": []
+}

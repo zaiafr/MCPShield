@@ -112,7 +112,11 @@ def main() -> None:
 
 
 def _run_scan(
-    target: str, output_format: str, out_dir: str, rules_path: str | None = None
+    target: str,
+    output_format: str,
+    out_dir: str,
+    rules_path: str | None = None,
+    quiet: bool = False,
 ) -> None:
     rules, rules_source = load_rules(rules_path)
     result = _scan_target(target, rules=rules, rules_source=rules_source)
@@ -120,8 +124,8 @@ def _run_scan(
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     stem = _safe_stem(target)
-    _write_result_files(result, output_format, out, stem)
-    print(f"Final score: {result.score}/100 ({result.risk_level})")
+    _write_result_files(result, output_format, out, stem, quiet=quiet)
+    _emit(f"Final score: {result.score}/100 ({result.risk_level})", quiet=quiet)
 
 
 def _print_check_list(rules: dict[str, Any] | None = None) -> None:
@@ -159,6 +163,7 @@ def _run_scan_batch(
     fail_on_critical: bool = False,
     min_score: float | None = None,
     rules_path: str | None = None,
+    quiet: bool = False,
 ) -> None:
     root = Path(input_dir)
     if not root.exists() or not root.is_dir():
@@ -179,20 +184,22 @@ def _run_scan_batch(
         result = _scan_target(str(target), rules=rules, rules_source=rules_source)
         results.append(result)
         if not summary_only:
-            _write_result_files(result, output_format, out, _safe_stem(target.name))
+            _write_result_files(
+                result, output_format, out, _safe_stem(target.name), quiet=quiet
+            )
 
     summary = _build_summary(results)
     summary_json_path = out / "summary.json"
     summary_json_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    print(f"Wrote {summary_json_path}")
+    _emit(f"Wrote {summary_json_path}", quiet=quiet)
 
     summary_md_path = out / "summary.md"
     summary_md_path.write_text(_render_summary_markdown(summary), encoding="utf-8")
-    print(f"Wrote {summary_md_path}")
+    _emit(f"Wrote {summary_md_path}", quiet=quiet)
 
     summary_csv_path = out / "summary.csv"
     summary_csv_path.write_text(_render_summary_csv(results), encoding="utf-8")
-    print(f"Wrote {summary_csv_path}")
+    _emit(f"Wrote {summary_csv_path}", quiet=quiet)
 
     violations: list[str] = []
     if fail_on_critical and summary["risk_level_counts"].get("critical", 0) > 0:
@@ -210,18 +217,20 @@ def _run_scan_batch(
         raise RuntimeError("Quality gate failed: " + " | ".join(violations))
 
 
-def _write_result_files(result: ScanResult, output_format: str, out: Path, stem: str) -> None:
+def _write_result_files(
+    result: ScanResult, output_format: str, out: Path, stem: str, quiet: bool = False
+) -> None:
     if output_format in {"json", "both"}:
         json_report = render_json(result)
         json_path = out / f"{stem}.risk.json"
         json_path.write_text(json_report, encoding="utf-8")
-        print(f"Wrote {json_path}")
+        _emit(f"Wrote {json_path}", quiet=quiet)
 
     if output_format in {"md", "both"}:
         md_report = render_markdown(result)
         md_path = out / f"{stem}.risk.md"
         md_path.write_text(md_report, encoding="utf-8")
-        print(f"Wrote {md_path}")
+        _emit(f"Wrote {md_path}", quiet=quiet)
 
 
 def _sort_findings(findings: list[Finding]) -> list[Finding]:
@@ -296,7 +305,9 @@ def _render_summary_csv(results: list[ScanResult]) -> str:
     return buf.getvalue()
 
 
-def _run_compare_summaries(old_csv: str, new_csv: str, out_dir: str) -> None:
+def _run_compare_summaries(
+    old_csv: str, new_csv: str, out_dir: str, quiet: bool = False
+) -> None:
     old_rows = _load_summary_csv(old_csv)
     new_rows = _load_summary_csv(new_csv)
     delta = _build_delta(old_rows, new_rows)
@@ -306,11 +317,16 @@ def _run_compare_summaries(old_csv: str, new_csv: str, out_dir: str) -> None:
 
     delta_json_path = out / "delta.json"
     delta_json_path.write_text(json.dumps(delta, indent=2), encoding="utf-8")
-    print(f"Wrote {delta_json_path}")
+    _emit(f"Wrote {delta_json_path}", quiet=quiet)
 
     delta_md_path = out / "delta.md"
     delta_md_path.write_text(_render_delta_markdown(delta), encoding="utf-8")
-    print(f"Wrote {delta_md_path}")
+    _emit(f"Wrote {delta_md_path}", quiet=quiet)
+
+
+def _emit(message: str, quiet: bool = False) -> None:
+    if not quiet:
+        print(message)
 
 
 def _load_summary_csv(path: str) -> dict[str, dict[str, Any]]:

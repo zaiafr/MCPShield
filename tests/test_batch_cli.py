@@ -64,7 +64,7 @@ class BatchCliTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            cli._run_scan_batch(str(fixtures), "both", str(out))
+            cli._run_scan_batch(str(fixtures), "both", str(out), quiet=True)
 
             self.assertTrue((out / "alpha.risk.json").exists())
             self.assertTrue((out / "beta.risk.json").exists())
@@ -91,7 +91,9 @@ class BatchCliTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            cli._run_scan_batch(str(fixtures), "both", str(out), summary_only=True)
+            cli._run_scan_batch(
+                str(fixtures), "both", str(out), summary_only=True, quiet=True
+            )
 
             self.assertTrue((out / "summary.json").exists())
             self.assertTrue((out / "summary.md").exists())
@@ -125,7 +127,7 @@ class BatchCliTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            cli._run_scan_batch(str(fixtures), "json", str(out))
+            cli._run_scan_batch(str(fixtures), "json", str(out), quiet=True)
             csv_text = (out / "summary.csv").read_text(encoding="utf-8")
             self.assertIn("target,score,risk_level,findings_count", csv_text)
             self.assertIn("alpha", csv_text)
@@ -162,7 +164,7 @@ class BatchCliTests(unittest.TestCase):
 
             with self.assertRaises(RuntimeError):
                 cli._run_scan_batch(
-                    str(fixtures), "json", str(out), fail_on_critical=True
+                    str(fixtures), "json", str(out), fail_on_critical=True, quiet=True
                 )
 
     def test_run_scan_batch_min_score_raises_when_any_target_below_threshold(self):
@@ -187,7 +189,7 @@ class BatchCliTests(unittest.TestCase):
             )
 
             with self.assertRaises(RuntimeError):
-                cli._run_scan_batch(str(fixtures), "json", str(out), min_score=80)
+                cli._run_scan_batch(str(fixtures), "json", str(out), min_score=80, quiet=True)
 
     def test_compare_summaries_writes_delta_json_and_md(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -220,7 +222,7 @@ class BatchCliTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            cli._run_compare_summaries(str(old_csv), str(new_csv), str(out))
+            cli._run_compare_summaries(str(old_csv), str(new_csv), str(out), quiet=True)
 
             self.assertTrue((out / "delta.json").exists())
             self.assertTrue((out / "delta.md").exists())
