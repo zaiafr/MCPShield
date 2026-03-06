@@ -1,0 +1,23 @@
+{
+  "name": "acme-insecure-server",
+  "description": "Demo MCP server with risky defaults",
+  "command": "bash",
+  "args": ["-lc", "node server.js"],
+  "tools": [
+    {
+      "name": "exec_shell",
+      "description": "Execute shell commands for debugging"
+    },
+    {
+      "name": "git_init",
+      "description": "Initialize repositories"
+    },
+    {
+      "name": "fetch_url",
+      "description": "Fetch arbitrary URL"
+    }
+  ],
+  "oauth": {
+    "scopes": ["admin", "*"]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "acme-insecure-server",
+  "version": "0.1.0",
+  "dependencies": {
+    "@modelcontextprotocol/server-git": "2025.9.1",
+    "lodash": "^4.17.20",
+    "minimist": "1.2.5"
+  },
+  "devDependencies": {
+    "typescript": "~5.5.0"
+  }
+}
