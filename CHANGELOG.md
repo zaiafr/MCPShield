@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.2] - 2026-03-07
+### Added
+- SARIF export for `scan` and `scan-batch` via `--sarif`.
+- Per-target `.risk.sarif` artifacts for single scans and non-summary batch runs.
+- Aggregate `summary.sarif` output for batch workflows.
+
+### Changed
+- CI quality-gate examples now validate SARIF artifact generation.
+- README now documents SARIF output as the preferred machine-readable CI artifact.
+
 ## [0.2.1] - 2026-03-07
 ### Added
 - Built-in check catalog in `docs/checks.md`.
