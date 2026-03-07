@@ -11,7 +11,6 @@ It produces:
 ## Table of Contents
 
 - [What It Checks](#what-it-checks)
-- [Positioning](#positioning)
 - [Install](#install)
 - [Quick Start](#quick-start)
 - [Detailed Process](#detailed-process)
@@ -37,14 +36,6 @@ The current scanner focuses on static signals that are easy to automate and usef
 - missing security metadata and local documentation files
 
 This is a first-pass static scanner. It does not execute server code and it can produce false positives.
-
-## Positioning
-
-MCPShield is strongest as an offline-first policy and trust scanner, not as a generic "scan everything MCP" product.
-
-- Primary wedge: local and CI-friendly policy gates for MCP inventories
-- Strong differentiators: offline-first workflow, configurable rules, batch summaries/diffs, and plugin trust controls
-- Competitive landscape and rationale: [docs/positioning.md](docs/positioning.md)
 
 ## Install
 
