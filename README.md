@@ -40,6 +40,13 @@ Plugin docs and examples:
 - `docs/plugins.md`
 - `plugins/examples/`
 
+Try the example plugins end to end:
+
+```bash
+python -m mcp_risk_scanner.cli plugin-manifest ./plugins/examples --out ./plugins/examples.lock
+python -m mcp_risk_scanner.cli scan ./samples --allow-plugins --plugins ./plugins/examples --allow-plugin-origin ./plugins/examples --plugin-lock ./plugins/examples.lock --out ./out
+```
+
 Generate plugin lock manifest:
 
 ```bash

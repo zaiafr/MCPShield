@@ -202,6 +202,66 @@ CHECKS = [
             self.assertNotEqual(bad.returncode, 0)
             self.assertIn("Plugin hash mismatch", bad.stderr)
 
+    def test_example_plugin_cli_flow_with_origin_and_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "target"
+            out = root / "out"
+            lock_path = root / "plugins.lock"
+            target.mkdir()
+            (target / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "example-target",
+                        "description": "TODO: tighten review before release",
+                        "tools": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            for index in range(21):
+                (target / f"module_{index}.py").write_text(
+                    "print('example')\n", encoding="utf-8"
+                )
+
+            repo_root = Path(__file__).resolve().parents[1]
+            plugin_dir = repo_root / "plugins" / "examples"
+
+            manifest = self._run("plugin-manifest", str(plugin_dir), "--out", str(lock_path))
+            self.assertEqual(manifest.returncode, 0, msg=manifest.stderr)
+
+            proc = self._run(
+                "scan",
+                str(target),
+                "--allow-plugins",
+                "--plugins",
+                str(plugin_dir),
+                "--allow-plugin-origin",
+                str(plugin_dir),
+                "--plugin-lock",
+                str(lock_path),
+                "--format",
+                "json",
+                "--out",
+                str(out),
+            )
+            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+
+            report_path = next(out.glob("*.risk.json"))
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            finding_ids = {finding["check_id"] for finding in report["findings"]}
+            self.assertIn("plugin_todo_tag", finding_ids)
+            self.assertIn("plugin_file_count", finding_ids)
+
+    def test_plugin_guide_includes_tested_example_command(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        plugin_guide = (repo_root / "docs" / "plugins.md").read_text(encoding="utf-8")
+        self.assertIn("plugin-manifest ./plugins/examples --out ./plugins/examples.lock", plugin_guide)
+        self.assertIn("scan ./samples", plugin_guide)
+        self.assertIn("--plugins ./plugins/examples", plugin_guide)
+        self.assertIn("--allow-plugin-origin ./plugins/examples", plugin_guide)
+        self.assertIn("--plugin-lock ./plugins/examples.lock", plugin_guide)
+
 
 if __name__ == "__main__":
     unittest.main()
