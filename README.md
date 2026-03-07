@@ -1,4 +1,4 @@
-# MCP Risk Scanner
+# MCPShield
 
 Offline-first CLI for scoring MCP server risk from `server.json` metadata and related package files.
 
@@ -49,28 +49,19 @@ PYTHONPATH=src python3 -m mcp_risk_scanner.cli --version
 ### Install as a CLI
 
 ```bash
-pip install -e .
-mcp-risk-scan --version
-```
-
-## Quick Start
-
-Scan the included sample directory:
-
-```bash
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan ./samples --format both --out ./out
+python -m mcpshield.cli scan ./samples/insecure-server.json --format both --out ./out
 ```
 
 List available checks:
 
 ```bash
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan --list-checks --rules ./rules.yml
+python -m mcpshield.cli --version
 ```
 
 Use custom rules:
 
 ```bash
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan ./samples --rules ./rules.yml --format both --out ./out
+python -m mcpshield.cli scan ./samples --rules ./rules.yml --format both --out ./out
 ```
 
 If you installed the package, replace `PYTHONPATH=src python3 -m mcp_risk_scanner.cli` with `mcp-risk-scan`.
@@ -91,37 +82,17 @@ Use one of the supported target types:
 Example:
 
 ```bash
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan ./samples --out ./out
+python -m mcpshield.cli scan --list-checks --rules ./rules.yml
 ```
 
-### 2. Review the findings and score
+Built-in check catalog:
+- `docs/checks.md`
 
-The scanner writes deterministic reports so diffs stay stable across runs:
-
-- `*.risk.json` for machine processing
-- `*.risk.md` for human review
-
-Example output files:
-
-```text
-out/
-  samples.risk.json
-  samples.risk.md
-```
-
-### 3. Tune the policy with `rules.yml`
-
-Use a rules file to:
-
-- disable checks
-- override severities
-- change thresholds such as stale release age
-- customize keyword lists
-
-Example:
+Load custom plugin checks:
 
 ```bash
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan ./samples --rules ./rules.yml --out ./out
+python -m mcpshield.cli scan ./samples --plugins ./plugins/my_checks.py --allow-plugins --out ./out
+python -m mcpshield.cli scan-batch ./fixtures --plugins ./plugins --allow-plugins --summary-only --out ./out
 ```
 
 ### 4. Scale to multiple targets
@@ -142,7 +113,7 @@ batch-input/
 Run it like this:
 
 ```bash
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan-batch ./batch-input --format both --out ./out
+python -m mcpshield.cli plugin-manifest ./plugins --out ./plugins.lock
 ```
 
 For batch runs, the scanner also writes:
@@ -156,7 +127,8 @@ For batch runs, the scanner also writes:
 Use batch mode to fail when risk crosses a threshold:
 
 ```bash
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan-batch ./batch-input --out ./out --fail-on-critical --min-score 70
+pip install -e .
+mcpshield scan ./samples/insecure-server.json --format both --out ./out
 ```
 
 ### 6. Track regressions between runs
@@ -164,7 +136,7 @@ PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan-batch ./batch-input --out ./
 Compare two `summary.csv` files to generate a delta report:
 
 ```bash
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli compare-summaries ./baseline/summary.csv ./current/summary.csv --out ./out
+python -m mcpshield.cli scan-batch ./fixtures --format both --out ./out
 ```
 
 This writes:
@@ -179,18 +151,13 @@ Plugin loading is opt-in because plugin code runs as Python code.
 Generate a plugin lock file:
 
 ```bash
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli plugin-manifest ./plugins/trusted --out ./plugins.lock
+python -m mcpshield.cli scan-batch ./fixtures --summary-only --out ./out
 ```
 
 Run with trust controls enabled:
 
 ```bash
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan ./samples \
-  --allow-plugins \
-  --plugins ./plugins/trusted \
-  --allow-plugin-origin ./plugins/trusted \
-  --plugin-lock ./plugins.lock \
-  --out ./out
+python -m mcpshield.cli scan-batch ./fixtures --out ./out --fail-on-critical --min-score 70
 ```
 
 ## Supported Inputs
@@ -208,46 +175,7 @@ PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan ./samples --out ./out
 Only files named `server.json` are accepted for direct file scans.
 
 ```bash
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan ./samples/server.json --out ./out
-```
-
-### Remote URL
-
-```bash
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan https://example.com/server.json --out ./out
-```
-
-### npm package
-
-The scanner fetches npm metadata and uses the latest tagged package version as a best-effort source.
-
-```bash
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan @scope/package-name --out ./out
-```
-
-## Rules and Tuning
-
-`rules.yml` lets you adjust built-in policy without changing code.
-
-Supported sections:
-
-- `checks`: enable or disable individual checks
-- `severity_overrides`: remap check severity
-- `thresholds`: adjust numeric thresholds
-- `keywords`: extend keyword-based detectors
-
-Example:
-
-```yaml
-checks:
-  dangerous_tools:
-    enabled: true
-
-severity_overrides:
-  missing_docs: medium
-
-thresholds:
-  stale_release_days: 180
+python -m mcpshield.cli compare-summaries ./baseline/summary.csv ./current/summary.csv --out ./out
 ```
 
 Reports include the applied rules source path so review output remains attributable.

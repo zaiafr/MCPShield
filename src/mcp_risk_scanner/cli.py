@@ -19,7 +19,7 @@ from .scoring import calculate_score
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="mcp-risk-scan", description="Scan MCP server risk")
+    parser = argparse.ArgumentParser(prog="mcpshield", description="Scan MCP server risk")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
