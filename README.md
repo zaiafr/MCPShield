@@ -85,10 +85,34 @@ Example:
 python -m mcpshield.cli scan --list-checks --rules ./rules.yml
 ```
 
-Built-in check catalog:
-- `docs/checks.md`
+### 2. Review the findings and score
 
-Load custom plugin checks:
+Built-in check catalog:
+- [docs/checks.md](docs/checks.md)
+
+The scanner writes deterministic reports so diffs stay stable across runs:
+
+- `*.risk.json` for machine processing
+- `*.risk.md` for human review
+
+Example output files:
+
+```text
+out/
+  samples.risk.json
+  samples.risk.md
+```
+
+### 3. Tune the policy with `rules.yml`
+
+Use a rules file to:
+
+- disable checks
+- override severities
+- change thresholds such as stale release age
+- customize keyword lists
+
+Example:
 
 ```bash
 python -m mcpshield.cli scan ./samples --plugins ./plugins/my_checks.py --allow-plugins --out ./out
