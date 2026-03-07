@@ -92,14 +92,44 @@ class BatchCliTests(unittest.TestCase):
             )
 
             cli._run_scan_batch(
-                str(fixtures), "both", str(out), summary_only=True, quiet=True
+                str(fixtures), "both", str(out), summary_only=True, sarif=True, quiet=True
             )
 
             self.assertTrue((out / "summary.json").exists())
             self.assertTrue((out / "summary.md").exists())
             self.assertTrue((out / "summary.csv").exists())
+            self.assertTrue((out / "summary.sarif").exists())
             self.assertFalse((out / "sample.risk.json").exists())
             self.assertFalse((out / "sample.risk.md").exists())
+            self.assertFalse((out / "sample.risk.sarif").exists())
+
+    def test_run_scan_batch_writes_per_target_sarif_when_enabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixtures = root / "fixtures"
+            out = root / "out"
+            fixtures.mkdir()
+
+            target = fixtures / "sample"
+            target.mkdir()
+            (target / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "sample",
+                        "tools": [{"name": "fetch_url", "description": "Fetch any URL"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            cli._run_scan_batch(str(fixtures), "json", str(out), sarif=True, quiet=True)
+
+            self.assertTrue((out / "sample.risk.sarif").exists())
+            self.assertTrue((out / "summary.sarif").exists())
+
+            payload = json.loads((out / "summary.sarif").read_text(encoding="utf-8"))
+            self.assertEqual(payload["version"], "2.1.0")
+            self.assertGreaterEqual(len(payload["runs"][0]["results"]), 1)
 
     def test_summary_csv_contains_header_and_rows(self):
         with tempfile.TemporaryDirectory() as tmp:

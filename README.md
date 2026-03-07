@@ -6,7 +6,7 @@ It produces:
 - ordered findings
 - a numeric score from `0-100`
 - a risk level: `low`, `medium`, `high`, or `critical`
-- JSON, Markdown, CSV, and delta reports for local review or CI
+- JSON, Markdown, SARIF, CSV, and delta reports for local review or CI
 
 ## Table of Contents
 
@@ -71,6 +71,12 @@ Use custom rules:
 
 ```bash
 mcpshield scan ./samples --rules ./rules.yml --format both --out ./out
+```
+
+Write a SARIF artifact for CI/code-scanning tools:
+
+```bash
+mcpshield scan ./samples --sarif --out ./out
 ```
 
 If you are running directly from the repo without installing the console script, use `PYTHONPATH=src python3 -m mcpshield.cli` as a developer fallback.
@@ -153,6 +159,7 @@ For batch runs, the scanner also writes:
 - `summary.json`
 - `summary.md`
 - `summary.csv`
+- `summary.sarif` when `--sarif` is enabled
 
 ### 5. Add CI-style quality gates
 
@@ -160,6 +167,12 @@ Use batch mode to fail when risk crosses a threshold:
 
 ```bash
 mcpshield scan-batch ./batch-input --out ./out --fail-on-critical --min-score 70
+```
+
+If you want a machine-readable security artifact for CI, add `--sarif`:
+
+```bash
+mcpshield scan-batch ./batch-input --summary-only --sarif --out ./out
 ```
 
 ### 6. Track regressions between runs
@@ -285,6 +298,7 @@ See [docs/plugins.md](/home/zaina/personal/mcp/docs/plugins.md) and `plugins/exa
 
 - `<target>.risk.json`
 - `<target>.risk.md`
+- `<target>.risk.sarif` when `--sarif` is enabled
 
 ### Batch mode
 
@@ -292,6 +306,7 @@ See [docs/plugins.md](/home/zaina/personal/mcp/docs/plugins.md) and `plugins/exa
 - `summary.json`
 - `summary.md`
 - `summary.csv`
+- `summary.sarif` when `--sarif` is enabled
 
 ### Summary comparison
 

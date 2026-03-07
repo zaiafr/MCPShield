@@ -65,15 +65,21 @@ class CliE2ETests(unittest.TestCase):
             self.assertGreaterEqual(len(list(out.glob("*.risk.json"))), 1)
             self.assertGreaterEqual(len(list(out.glob("*.risk.md"))), 1)
 
+            proc_sarif = self._run("scan", str(target), "--sarif", "--out", str(out))
+            self.assertEqual(proc_sarif.returncode, 0, msg=proc_sarif.stderr)
+            self.assertGreaterEqual(len(list(out.glob("*.risk.sarif"))), 1)
+
             proc_batch = self._run(
                 "scan-batch",
                 str(fixtures),
                 "--out",
                 str(current),
                 "--summary-only",
+                "--sarif",
             )
             self.assertEqual(proc_batch.returncode, 0, msg=proc_batch.stderr)
             self.assertTrue((current / "summary.csv").exists())
+            self.assertTrue((current / "summary.sarif").exists())
 
             (baseline / "summary.csv").write_text(
                 "target,score,risk_level,findings_count\n"
