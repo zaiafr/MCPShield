@@ -175,6 +175,17 @@ If you want a machine-readable security artifact for CI, add `--sarif`:
 mcpshield scan-batch ./batch-input --summary-only --sarif --out ./out
 ```
 
+If you want CI to fail only on newly introduced high-severity findings, compare against a previous SARIF baseline:
+
+```bash
+mcpshield scan-batch ./batch-input \
+  --summary-only \
+  --sarif \
+  --baseline-sarif ./baseline/summary.sarif \
+  --fail-on-new-high \
+  --out ./out
+```
+
 ### 6. Track regressions between runs
 
 Compare two `summary.csv` files to generate a delta report:
@@ -312,6 +323,11 @@ See [docs/plugins.md](/home/zaina/personal/mcp/docs/plugins.md) and `plugins/exa
 
 - `delta.json`
 - `delta.md`
+
+### Regression-aware gating
+
+- `regression-summary.json` when `--baseline-sarif` is used
+- `regression-summary.md` when `--baseline-sarif` is used
 
 Findings are written in deterministic order: severity first, then `check_id`.
 

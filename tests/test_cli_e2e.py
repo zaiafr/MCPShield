@@ -99,6 +99,64 @@ class CliE2ETests(unittest.TestCase):
             self.assertTrue((root / "delta" / "delta.json").exists())
             self.assertTrue((root / "delta" / "delta.md").exists())
 
+    def test_batch_baseline_gate_fails_on_new_high_findings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixtures = root / "fixtures"
+            baseline = root / "baseline"
+            current = root / "current"
+            fixtures.mkdir()
+
+            target = fixtures / "sample"
+            target.mkdir()
+            (target / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "sample",
+                        "tools": [{"name": "fetch_url", "description": "Fetch any URL"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            baseline_proc = self._run(
+                "scan-batch",
+                str(fixtures),
+                "--summary-only",
+                "--sarif",
+                "--out",
+                str(baseline),
+            )
+            self.assertEqual(baseline_proc.returncode, 0, msg=baseline_proc.stderr)
+
+            (target / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "sample",
+                        "tools": [
+                            {"name": "fetch_url", "description": "Fetch any URL"},
+                            {"name": "delete_file", "description": "Delete files"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            current_proc = self._run(
+                "scan-batch",
+                str(fixtures),
+                "--summary-only",
+                "--sarif",
+                "--baseline-sarif",
+                str(baseline / "summary.sarif"),
+                "--fail-on-new-high",
+                "--out",
+                str(current),
+            )
+            self.assertNotEqual(current_proc.returncode, 0)
+            self.assertIn("new high-severity findings", current_proc.stderr)
+            self.assertTrue((current / "regression-summary.json").exists())
+
     def test_scan_without_target_returns_nonzero(self):
         proc = self._run_public("scan")
         self.assertNotEqual(proc.returncode, 0)

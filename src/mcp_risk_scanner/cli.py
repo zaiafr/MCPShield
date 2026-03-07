@@ -137,6 +137,16 @@ def main() -> None:
         default=None,
         help="Path to plugin lock JSON mapping plugin absolute paths to sha256",
     )
+    batch_parser.add_argument(
+        "--baseline-sarif",
+        default=None,
+        help="Path to a previous summary.sarif file used for regression-aware gating",
+    )
+    batch_parser.add_argument(
+        "--fail-on-new-high",
+        action="store_true",
+        help="Return non-zero if the batch introduces new high/critical findings relative to --baseline-sarif",
+    )
     compare_parser = subparsers.add_parser(
         "compare-summaries", help="Compare two summary.csv files and write delta outputs"
     )
@@ -199,6 +209,8 @@ def main() -> None:
             allowed_origins=args.allow_plugin_origin,
             plugin_lock=args.plugin_lock,
             sarif=args.sarif,
+            baseline_sarif=args.baseline_sarif,
+            fail_on_new_high=args.fail_on_new_high,
         )
     elif args.command == "compare-summaries":
         _run_compare_summaries(args.old_csv, args.new_csv, args.out)
@@ -281,6 +293,8 @@ def _run_scan_batch(
     allowed_origins: list[str] | None = None,
     plugin_lock: str | None = None,
     sarif: bool = False,
+    baseline_sarif: str | None = None,
+    fail_on_new_high: bool = False,
     quiet: bool = False,
 ) -> None:
     root = Path(input_dir)
@@ -334,6 +348,16 @@ def _run_scan_batch(
         summary_sarif_path.write_text(render_batch_sarif(results), encoding="utf-8")
         _emit(f"Wrote {summary_sarif_path}", quiet=quiet)
 
+    if baseline_sarif:
+        regression = _build_regression_summary(results, baseline_sarif)
+        regression_json_path = out / "regression-summary.json"
+        regression_json_path.write_text(json.dumps(regression, indent=2), encoding="utf-8")
+        _emit(f"Wrote {regression_json_path}", quiet=quiet)
+
+        regression_md_path = out / "regression-summary.md"
+        regression_md_path.write_text(_render_regression_markdown(regression), encoding="utf-8")
+        _emit(f"Wrote {regression_md_path}", quiet=quiet)
+
     violations: list[str] = []
     if fail_on_critical and summary["risk_level_counts"].get("critical", 0) > 0:
         violations.append("critical risk targets detected")
@@ -344,6 +368,15 @@ def _run_scan_batch(
             violations.append(
                 f"{len(below)} target(s) below min score {min_score}: "
                 + ", ".join(Path(r.target).name for r in below[:10])
+            )
+
+    if fail_on_new_high:
+        if not baseline_sarif:
+            raise ValueError("--fail-on-new-high requires --baseline-sarif")
+        regression = _build_regression_summary(results, baseline_sarif)
+        if regression["new_high_findings_count"] > 0:
+            violations.append(
+                f"new high-severity findings detected: {regression['new_high_findings_count']}"
             )
 
     if violations:
@@ -466,6 +499,79 @@ def _run_compare_summaries(
     delta_md_path = out / "delta.md"
     delta_md_path.write_text(_render_delta_markdown(delta), encoding="utf-8")
     _emit(f"Wrote {delta_md_path}", quiet=quiet)
+
+
+def _build_regression_summary(results: list[ScanResult], baseline_sarif: str) -> dict[str, Any]:
+    baseline_keys = _load_baseline_sarif_keys(baseline_sarif)
+    new_high_findings: list[dict[str, str]] = []
+
+    for result in results:
+        target_name = Path(result.target).name
+        for finding in result.findings:
+            if _severity_rank(finding.severity) < _severity_rank("high"):
+                continue
+            fingerprint = _finding_fingerprint(target_name, finding.check_id)
+            if fingerprint in baseline_keys:
+                continue
+            new_high_findings.append(
+                {
+                    "target": target_name,
+                    "check_id": finding.check_id,
+                    "severity": finding.severity,
+                    "title": finding.title,
+                }
+            )
+
+    return {
+        "baseline_source": baseline_sarif,
+        "new_high_findings_count": len(new_high_findings),
+        "new_high_findings": sorted(
+            new_high_findings, key=lambda item: (item["target"], item["check_id"])
+        ),
+    }
+
+
+def _load_baseline_sarif_keys(path: str) -> set[str]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    keys: set[str] = set()
+    for run in payload.get("runs", []):
+        for result in run.get("results", []):
+            properties = result.get("properties", {})
+            target = str(properties.get("target", ""))
+            target_name = Path(target).name if target else ""
+            rule_id = str(result.get("ruleId", ""))
+            level = str(result.get("level", ""))
+            if _sarif_level_rank(level) >= _sarif_level_rank("error") and target_name and rule_id:
+                keys.add(_finding_fingerprint(target_name, rule_id))
+    return keys
+
+
+def _finding_fingerprint(target_name: str, check_id: str) -> str:
+    return f"{target_name}::{check_id}"
+
+
+def _sarif_level_rank(level: str) -> int:
+    ranks = {"error": 3, "warning": 2, "note": 1}
+    return ranks.get(level, 0)
+
+
+def _render_regression_markdown(summary: dict[str, Any]) -> str:
+    lines = [
+        "# MCP Regression Summary",
+        "",
+        f"- Baseline: `{summary['baseline_source']}`",
+        f"- New high-severity findings: **{summary['new_high_findings_count']}**",
+        "",
+    ]
+    if not summary["new_high_findings"]:
+        lines.extend(["No new high-severity findings detected.", ""])
+        return "\n".join(lines)
+
+    lines.extend(["## New High-Severity Findings", "", "| Target | Check ID | Severity |", "|---|---|---|"])
+    for finding in summary["new_high_findings"]:
+        lines.append(f"| {finding['target']} | {finding['check_id']} | {finding['severity']} |")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _emit(message: str, quiet: bool = False) -> None:
