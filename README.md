@@ -1,6 +1,6 @@
 # MCPShield
 
-Offline-first CLI for scoring MCP server risk from `server.json` metadata and related package files.
+Offline-first MCP policy and trust scanner for CI and local review.
 
 It produces:
 - ordered findings
@@ -11,6 +11,7 @@ It produces:
 ## Table of Contents
 
 - [What It Checks](#what-it-checks)
+- [Positioning](#positioning)
 - [Install](#install)
 - [Quick Start](#quick-start)
 - [Detailed Process](#detailed-process)
@@ -37,25 +38,42 @@ The current scanner focuses on static signals that are easy to automate and usef
 
 This is a first-pass static scanner. It does not execute server code and it can produce false positives.
 
+## Positioning
+
+MCPShield is strongest as an offline-first policy and trust scanner, not as a generic "scan everything MCP" product.
+
+- Primary wedge: local and CI-friendly policy gates for MCP inventories
+- Strong differentiators: offline-first workflow, configurable rules, batch summaries/diffs, and plugin trust controls
+- Competitive landscape and rationale: [docs/positioning.md](docs/positioning.md)
+
 ## Install
 
 ### Run from this repo
 
 ```bash
 pip install 'PyYAML>=6.0'
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli --version
+PYTHONPATH=src python3 -m mcpshield.cli --version
 ```
 
 ### Install as a CLI
 
 ```bash
-python -m mcpshield.cli scan ./samples/insecure-server.json --format both --out ./out
+pip install -e .
+mcpshield --version
+```
+
+## Quick Start
+
+Scan the included sample directory:
+
+```bash
+python -m mcpshield.cli scan ./samples --format both --out ./out
 ```
 
 List available checks:
 
 ```bash
-python -m mcpshield.cli --version
+python -m mcpshield.cli scan --list-checks --rules ./rules.yml
 ```
 
 Use custom rules:
@@ -64,7 +82,7 @@ Use custom rules:
 python -m mcpshield.cli scan ./samples --rules ./rules.yml --format both --out ./out
 ```
 
-If you installed the package, replace `PYTHONPATH=src python3 -m mcp_risk_scanner.cli` with `mcp-risk-scan`.
+If you installed the package, replace `python -m mcpshield.cli` with `mcpshield`.
 
 ## Detailed Process
 
@@ -82,7 +100,7 @@ Use one of the supported target types:
 Example:
 
 ```bash
-python -m mcpshield.cli scan --list-checks --rules ./rules.yml
+python -m mcpshield.cli scan ./samples --out ./out
 ```
 
 ### 2. Review the findings and score
@@ -115,8 +133,7 @@ Use a rules file to:
 Example:
 
 ```bash
-python -m mcpshield.cli scan ./samples --plugins ./plugins/my_checks.py --allow-plugins --out ./out
-python -m mcpshield.cli scan-batch ./fixtures --plugins ./plugins --allow-plugins --summary-only --out ./out
+python -m mcpshield.cli scan ./samples --rules ./rules.yml --out ./out
 ```
 
 ### 4. Scale to multiple targets
@@ -137,7 +154,7 @@ batch-input/
 Run it like this:
 
 ```bash
-python -m mcpshield.cli plugin-manifest ./plugins --out ./plugins.lock
+python -m mcpshield.cli scan-batch ./batch-input --format both --out ./out
 ```
 
 For batch runs, the scanner also writes:
@@ -151,8 +168,7 @@ For batch runs, the scanner also writes:
 Use batch mode to fail when risk crosses a threshold:
 
 ```bash
-pip install -e .
-mcpshield scan ./samples/insecure-server.json --format both --out ./out
+python -m mcpshield.cli scan-batch ./batch-input --out ./out --fail-on-critical --min-score 70
 ```
 
 ### 6. Track regressions between runs
@@ -160,7 +176,7 @@ mcpshield scan ./samples/insecure-server.json --format both --out ./out
 Compare two `summary.csv` files to generate a delta report:
 
 ```bash
-python -m mcpshield.cli scan-batch ./fixtures --format both --out ./out
+python -m mcpshield.cli compare-summaries ./baseline/summary.csv ./current/summary.csv --out ./out
 ```
 
 This writes:
@@ -175,13 +191,18 @@ Plugin loading is opt-in because plugin code runs as Python code.
 Generate a plugin lock file:
 
 ```bash
-python -m mcpshield.cli scan-batch ./fixtures --summary-only --out ./out
+python -m mcpshield.cli plugin-manifest ./plugins/trusted --out ./plugins.lock
 ```
 
 Run with trust controls enabled:
 
 ```bash
-python -m mcpshield.cli scan-batch ./fixtures --out ./out --fail-on-critical --min-score 70
+python -m mcpshield.cli scan ./samples \
+  --allow-plugins \
+  --plugins ./plugins/trusted \
+  --allow-plugin-origin ./plugins/trusted \
+  --plugin-lock ./plugins.lock \
+  --out ./out
 ```
 
 ## Supported Inputs
@@ -191,7 +212,7 @@ python -m mcpshield.cli scan-batch ./fixtures --out ./out --fail-on-critical --m
 The directory must contain `server.json`. If `package.json` is present, it is used automatically.
 
 ```bash
-PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan ./samples --out ./out
+python -m mcpshield.cli scan ./samples --out ./out
 ```
 
 ### Local file
@@ -199,10 +220,49 @@ PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan ./samples --out ./out
 Only files named `server.json` are accepted for direct file scans.
 
 ```bash
-python -m mcpshield.cli compare-summaries ./baseline/summary.csv ./current/summary.csv --out ./out
+python -m mcpshield.cli scan ./samples/server.json --out ./out
 ```
 
 Reports include the applied rules source path so review output remains attributable.
+
+### Remote URL
+
+```bash
+python -m mcpshield.cli scan https://example.com/server.json --out ./out
+```
+
+### npm package
+
+The scanner fetches npm metadata and uses the latest tagged package version as a best-effort source.
+
+```bash
+python -m mcpshield.cli scan @scope/package-name --out ./out
+```
+
+## Rules and Tuning
+
+`rules.yml` lets you adjust built-in policy without changing code.
+
+Supported sections:
+
+- `checks`: enable or disable individual checks
+- `severity_overrides`: remap check severity
+- `thresholds`: adjust numeric thresholds
+- `keywords`: extend keyword-based detectors
+
+Example:
+
+```yaml
+checks:
+  dangerous_tools:
+    enabled: true
+
+severity_overrides:
+  missing_docs: medium
+
+thresholds:
+  stale_release_days: 180
+```
 
 ## Plugins
 
