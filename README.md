@@ -96,6 +96,9 @@ PYTHONPATH=src python3 -m mcp_risk_scanner.cli scan ./samples --out ./out
 
 ### 2. Review the findings and score
 
+Built-in check catalog:
+- [docs/checks.md](docs/checks.md)
+
 The scanner writes deterministic reports so diffs stay stable across runs:
 
 - `*.risk.json` for machine processing
