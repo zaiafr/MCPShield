@@ -1,4 +1,4 @@
-# MCP Risk Scanner (Phase 1)
+# MCPShield
 
 A narrow MVP scanner that analyzes MCP server metadata and package manifests to generate:
 - risk findings
@@ -8,25 +8,25 @@ A narrow MVP scanner that analyzes MCP server metadata and package manifests to 
 ## Quick start
 
 ```bash
-python -m mcp_risk_scanner.cli scan ./samples/insecure-server.json --format both --out ./out
+python -m mcpshield.cli scan ./samples/insecure-server.json --format both --out ./out
 ```
 
 Show CLI version:
 
 ```bash
-python -m mcp_risk_scanner.cli --version
+python -m mcpshield.cli --version
 ```
 
 Use custom rules:
 
 ```bash
-python -m mcp_risk_scanner.cli scan ./samples --rules ./rules.yml --format both --out ./out
+python -m mcpshield.cli scan ./samples --rules ./rules.yml --format both --out ./out
 ```
 
 List checks under current rules:
 
 ```bash
-python -m mcp_risk_scanner.cli scan --list-checks --rules ./rules.yml
+python -m mcpshield.cli scan --list-checks --rules ./rules.yml
 ```
 
 Built-in check catalog:
@@ -35,14 +35,14 @@ Built-in check catalog:
 Load custom plugin checks:
 
 ```bash
-python -m mcp_risk_scanner.cli scan ./samples --plugins ./plugins/my_checks.py --allow-plugins --out ./out
-python -m mcp_risk_scanner.cli scan-batch ./fixtures --plugins ./plugins --allow-plugins --summary-only --out ./out
+python -m mcpshield.cli scan ./samples --plugins ./plugins/my_checks.py --allow-plugins --out ./out
+python -m mcpshield.cli scan-batch ./fixtures --plugins ./plugins --allow-plugins --summary-only --out ./out
 ```
 
 Generate plugin lock manifest:
 
 ```bash
-python -m mcp_risk_scanner.cli plugin-manifest ./plugins --out ./plugins.lock
+python -m mcpshield.cli plugin-manifest ./plugins --out ./plugins.lock
 ```
 
 This repo includes a committed `plugins.lock` for trusted plugin CI runs.
@@ -51,31 +51,31 @@ Or install as editable:
 
 ```bash
 pip install -e .
-mcp-risk-scan scan ./samples/insecure-server.json --format both --out ./out
+mcpshield scan ./samples/insecure-server.json --format both --out ./out
 ```
 
 Batch scan local fixtures:
 
 ```bash
-python -m mcp_risk_scanner.cli scan-batch ./fixtures --format both --out ./out
+python -m mcpshield.cli scan-batch ./fixtures --format both --out ./out
 ```
 
 Summary-only batch scan:
 
 ```bash
-python -m mcp_risk_scanner.cli scan-batch ./fixtures --summary-only --out ./out
+python -m mcpshield.cli scan-batch ./fixtures --summary-only --out ./out
 ```
 
 Batch scan with quality gates:
 
 ```bash
-python -m mcp_risk_scanner.cli scan-batch ./fixtures --out ./out --fail-on-critical --min-score 70
+python -m mcpshield.cli scan-batch ./fixtures --out ./out --fail-on-critical --min-score 70
 ```
 
 Compare two batch summary CSV files:
 
 ```bash
-python -m mcp_risk_scanner.cli compare-summaries ./baseline/summary.csv ./current/summary.csv --out ./out
+python -m mcpshield.cli compare-summaries ./baseline/summary.csv ./current/summary.csv --out ./out
 ```
 
 ## Supported inputs

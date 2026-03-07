@@ -7,6 +7,7 @@ from typing import Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from . import __version__
 from .models import ScanInput
 
 
@@ -126,7 +127,7 @@ def _extract_server_json_from_package(package_json: dict | None) -> dict | None:
 
 
 def _fetch_json(url: str, timeout_seconds: int) -> dict:
-    request = Request(url, headers={"User-Agent": "mcp-risk-scanner/0.1"})
+    request = Request(url, headers={"User-Agent": f"mcpshield/{__version__}"})
     try:
         with urlopen(request, timeout=timeout_seconds) as response:
             raw = response.read().decode("utf-8")

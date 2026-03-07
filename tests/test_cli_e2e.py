@@ -9,10 +9,16 @@ from pathlib import Path
 
 class CliE2ETests(unittest.TestCase):
     def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return self._run_module("mcp_risk_scanner.cli", *args)
+
+    def _run_public(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return self._run_module("mcpshield.cli", *args)
+
+    def _run_module(self, module_name: str, *args: str) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
         env.setdefault("PYTHONPATH", "src")
         return subprocess.run(
-            [sys.executable, "-m", "mcp_risk_scanner.cli", *args],
+            [sys.executable, "-m", module_name, *args],
             cwd=Path(__file__).resolve().parents[1],
             env=env,
             capture_output=True,
@@ -21,9 +27,9 @@ class CliE2ETests(unittest.TestCase):
         )
 
     def test_version_command(self):
-        proc = self._run("--version")
+        proc = self._run_public("--version")
         self.assertEqual(proc.returncode, 0)
-        self.assertIn("mcp-risk-scan", proc.stdout)
+        self.assertIn("mcpshield", proc.stdout.lower())
 
     def test_scan_and_batch_and_compare_end_to_end(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -88,9 +94,14 @@ class CliE2ETests(unittest.TestCase):
             self.assertTrue((root / "delta" / "delta.md").exists())
 
     def test_scan_without_target_returns_nonzero(self):
-        proc = self._run("scan")
+        proc = self._run_public("scan")
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("scan target is required", proc.stderr)
+
+    def test_internal_module_entrypoint_remains_compatible(self):
+        proc = self._run("--version")
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("mcpshield", proc.stdout.lower())
 
     def test_plugins_require_explicit_allow_flag(self):
         with tempfile.TemporaryDirectory() as tmp:
