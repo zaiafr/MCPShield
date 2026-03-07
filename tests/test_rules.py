@@ -5,7 +5,7 @@ from pathlib import Path
 
 from mcp_risk_scanner.checks import run_checks
 from mcp_risk_scanner.checks import list_available_checks
-from mcp_risk_scanner.report import render_json
+from mcp_risk_scanner.report import render_json, render_sarif
 from mcp_risk_scanner.collector import collect_input
 from mcp_risk_scanner.rules import load_rules
 from mcp_risk_scanner.models import ScanResult
@@ -97,6 +97,51 @@ thresholds:
         )
         report_json = render_json(result)
         self.assertIn('\"rules_source\": \"/tmp/rules.yml\"', report_json)
+
+    def test_render_sarif_includes_rule_and_result_entries(self):
+        result = ScanResult(
+            target="/tmp/example",
+            source_type="directory",
+            score=40,
+            risk_level="high",
+            findings=[
+                {
+                    "check_id": "dangerous_tools",
+                    "title": "Potentially dangerous tools exposed",
+                    "severity": "high",
+                    "category": "capability",
+                    "message": "Tool metadata indicates privileged or risky capabilities.",
+                    "evidence": "Flagged tools: exec_shell",
+                    "remediation": "Restrict high-risk tools by default.",
+                    "evidence_data": {"tools": ["exec_shell"]},
+                }
+            ],
+            rules_source="/tmp/rules.yml",
+        )
+        result.findings = []  # type: ignore[misc]
+        from mcp_risk_scanner.models import Finding
+
+        result.findings.append(
+            Finding(
+                check_id="dangerous_tools",
+                title="Potentially dangerous tools exposed",
+                severity="high",
+                category="capability",
+                message="Tool metadata indicates privileged or risky capabilities.",
+                evidence="Flagged tools: exec_shell",
+                remediation="Restrict high-risk tools by default.",
+                evidence_data={"tools": ["exec_shell"]},
+            )
+        )
+
+        payload = json.loads(render_sarif(result))
+        self.assertEqual(payload["version"], "2.1.0")
+        self.assertEqual(payload["runs"][0]["tool"]["driver"]["name"], "MCPShield")
+        self.assertEqual(payload["runs"][0]["results"][0]["ruleId"], "dangerous_tools")
+        self.assertEqual(
+            payload["runs"][0]["tool"]["driver"]["rules"][0]["defaultConfiguration"]["level"],
+            "error",
+        )
 
     def test_unknown_check_ids_in_rules_raise(self):
         with tempfile.TemporaryDirectory() as tmp:

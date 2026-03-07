@@ -42,7 +42,8 @@ jobs:
         env:
           PYTHONPATH: src
         run: |
-          mcpshield scan-batch ./fixtures/ci-safe --summary-only --out /tmp/mcp-ci --fail-on-critical --min-score 80
+          mcpshield scan-batch ./fixtures/ci-safe --summary-only --sarif --out /tmp/mcp-ci --fail-on-critical --min-score 80
+          test -f /tmp/mcp-ci/summary.sarif
 
       - name: Run plugin trust-path fixture
         env:
