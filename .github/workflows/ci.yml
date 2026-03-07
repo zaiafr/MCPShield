@@ -56,3 +56,16 @@ jobs:
             --plugins ./plugins/trusted \
             --allow-plugin-origin ./plugins/trusted \
             --plugin-lock ./plugins.lock
+
+      - name: Run regression-aware baseline gate fixture
+        env:
+          PYTHONPATH: src
+        run: |
+          mcpshield scan-batch ./fixtures/ci-safe --summary-only --sarif --out /tmp/mcp-ci-baseline
+          mcpshield scan-batch ./fixtures/ci-safe \
+            --summary-only \
+            --sarif \
+            --baseline-sarif /tmp/mcp-ci-baseline/summary.sarif \
+            --fail-on-new-high \
+            --out /tmp/mcp-ci-regression
+          test -f /tmp/mcp-ci-regression/regression-summary.json

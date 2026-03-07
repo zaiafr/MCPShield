@@ -221,6 +221,108 @@ class BatchCliTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 cli._run_scan_batch(str(fixtures), "json", str(out), min_score=80, quiet=True)
 
+    def test_run_scan_batch_fail_on_new_high_uses_baseline_sarif(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixtures = root / "fixtures"
+            baseline_out = root / "baseline"
+            current_out = root / "current"
+            fixtures.mkdir()
+
+            stable = fixtures / "stable"
+            stable.mkdir()
+            (stable / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "stable",
+                        "tools": [{"name": "fetch_url", "description": "Fetch any URL"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            cli._run_scan_batch(
+                str(fixtures), "json", str(baseline_out), summary_only=True, sarif=True, quiet=True
+            )
+
+            # Introduce a new high-severity finding after the baseline was captured.
+            (stable / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "stable",
+                        "tools": [
+                            {"name": "fetch_url", "description": "Fetch any URL"},
+                            {"name": "delete_file", "description": "Delete files"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(RuntimeError) as ctx:
+                cli._run_scan_batch(
+                    str(fixtures),
+                    "json",
+                    str(current_out),
+                    summary_only=True,
+                    sarif=True,
+                    baseline_sarif=str(baseline_out / "summary.sarif"),
+                    fail_on_new_high=True,
+                    quiet=True,
+                )
+
+            self.assertIn("new high-severity findings", str(ctx.exception))
+            self.assertTrue((current_out / "regression-summary.json").exists())
+            self.assertTrue((current_out / "regression-summary.md").exists())
+
+            summary = json.loads(
+                (current_out / "regression-summary.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(summary["new_high_findings_count"], 1)
+            self.assertEqual(summary["baseline_source"], str(baseline_out / "summary.sarif"))
+
+    def test_run_scan_batch_baseline_sarif_allows_existing_high_findings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixtures = root / "fixtures"
+            baseline_out = root / "baseline"
+            current_out = root / "current"
+            fixtures.mkdir()
+
+            stable = fixtures / "stable"
+            stable.mkdir()
+            (stable / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "stable",
+                        "tools": [
+                            {"name": "fetch_url", "description": "Fetch any URL"},
+                            {"name": "delete_file", "description": "Delete files"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            cli._run_scan_batch(
+                str(fixtures), "json", str(baseline_out), summary_only=True, sarif=True, quiet=True
+            )
+            cli._run_scan_batch(
+                str(fixtures),
+                "json",
+                str(current_out),
+                summary_only=True,
+                sarif=True,
+                baseline_sarif=str(baseline_out / "summary.sarif"),
+                fail_on_new_high=True,
+                quiet=True,
+            )
+
+            summary = json.loads(
+                (current_out / "regression-summary.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(summary["new_high_findings_count"], 0)
+
     def test_compare_summaries_writes_delta_json_and_md(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
