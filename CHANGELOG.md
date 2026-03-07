@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-03-07
+### Added
+- Built-in check catalog in `docs/checks.md`.
+- Documentation tests that keep README and check-catalog references aligned.
+- Example plugin coverage through direct tests and end-to-end CLI flows.
+
+### Changed
+- Public docs and CI examples now default to the `mcpshield` CLI command.
+- README examples were cleaned up to favor the installed CLI over Python module invocation.
+
+### Removed
+- Internal-only positioning notes from the public repository docs.
+
 ## [0.2.0] - 2026-03-06
 ### Added
 - Plugin support for custom checks via `--plugins`.

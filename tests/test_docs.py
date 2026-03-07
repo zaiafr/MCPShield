@@ -10,6 +10,10 @@ class DocsTests(unittest.TestCase):
         repo_root = Path(__file__).resolve().parents[1]
         readme = (repo_root / "README.md").read_text(encoding="utf-8")
         self.assertTrue(readme.startswith("# MCPShield\n"))
+        self.assertIn("mcpshield scan", readme)
+        self.assertNotIn("## Positioning", readme)
+        self.assertNotIn("docs/positioning.md", readme)
+        self.assertNotIn("python -m mcpshield.cli scan ./samples --format both --out ./out", readme)
         self.assertIn("offline-first mcp policy and trust scanner", readme.lower())
 
     def test_check_catalog_lists_all_built_in_checks(self):

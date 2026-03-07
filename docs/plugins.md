@@ -7,7 +7,7 @@ MCPShield supports custom checks through Python plugin modules.
 Plugin code is privileged code. Always use trust controls when loading plugins:
 
 ```bash
-python -m mcp_risk_scanner.cli scan ./samples \
+mcpshield scan ./samples \
   --allow-plugins \
   --plugins ./plugins/trusted \
   --allow-plugin-origin ./plugins/trusted \
@@ -46,9 +46,9 @@ Plugin runners are sandboxed by policy in the scanner runtime:
 ## Try The Example Plugins
 
 ```bash
-python -m mcp_risk_scanner.cli plugin-manifest ./plugins/examples --out ./plugins/examples.lock
+mcpshield plugin-manifest ./plugins/examples --out ./plugins/examples.lock
 
-python -m mcp_risk_scanner.cli scan ./samples \
+mcpshield scan ./samples \
   --allow-plugins \
   --plugins ./plugins/examples \
   --allow-plugin-origin ./plugins/examples \
@@ -59,13 +59,13 @@ python -m mcp_risk_scanner.cli scan ./samples \
 ## Generate Lock File
 
 ```bash
-python -m mcp_risk_scanner.cli plugin-manifest ./plugins/trusted --out ./plugins.lock
+mcpshield plugin-manifest ./plugins/trusted --out ./plugins.lock
 ```
 
 ## List All Checks (Built-in + Plugin)
 
 ```bash
-python -m mcp_risk_scanner.cli scan --list-checks \
+mcpshield scan --list-checks \
   --allow-plugins \
   --plugins ./plugins/trusted
 ```

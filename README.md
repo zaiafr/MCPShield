@@ -58,22 +58,22 @@ mcpshield --version
 Scan the included sample directory:
 
 ```bash
-python -m mcpshield.cli scan ./samples --format both --out ./out
+mcpshield scan ./samples --format both --out ./out
 ```
 
 List available checks:
 
 ```bash
-python -m mcpshield.cli scan --list-checks --rules ./rules.yml
+mcpshield scan --list-checks --rules ./rules.yml
 ```
 
 Use custom rules:
 
 ```bash
-python -m mcpshield.cli scan ./samples --rules ./rules.yml --format both --out ./out
+mcpshield scan ./samples --rules ./rules.yml --format both --out ./out
 ```
 
-If you installed the package, replace `python -m mcpshield.cli` with `mcpshield`.
+If you are running directly from the repo without installing the console script, use `PYTHONPATH=src python3 -m mcpshield.cli` as a developer fallback.
 
 ## Detailed Process
 
@@ -91,7 +91,7 @@ Use one of the supported target types:
 Example:
 
 ```bash
-python -m mcpshield.cli scan ./samples --out ./out
+mcpshield scan ./samples --out ./out
 ```
 
 ### 2. Review the findings and score
@@ -124,7 +124,7 @@ Use a rules file to:
 Example:
 
 ```bash
-python -m mcpshield.cli scan ./samples --rules ./rules.yml --out ./out
+mcpshield scan ./samples --rules ./rules.yml --out ./out
 ```
 
 ### 4. Scale to multiple targets
@@ -145,7 +145,7 @@ batch-input/
 Run it like this:
 
 ```bash
-python -m mcpshield.cli scan-batch ./batch-input --format both --out ./out
+mcpshield scan-batch ./batch-input --format both --out ./out
 ```
 
 For batch runs, the scanner also writes:
@@ -159,7 +159,7 @@ For batch runs, the scanner also writes:
 Use batch mode to fail when risk crosses a threshold:
 
 ```bash
-python -m mcpshield.cli scan-batch ./batch-input --out ./out --fail-on-critical --min-score 70
+mcpshield scan-batch ./batch-input --out ./out --fail-on-critical --min-score 70
 ```
 
 ### 6. Track regressions between runs
@@ -167,7 +167,7 @@ python -m mcpshield.cli scan-batch ./batch-input --out ./out --fail-on-critical 
 Compare two `summary.csv` files to generate a delta report:
 
 ```bash
-python -m mcpshield.cli compare-summaries ./baseline/summary.csv ./current/summary.csv --out ./out
+mcpshield compare-summaries ./baseline/summary.csv ./current/summary.csv --out ./out
 ```
 
 This writes:
@@ -182,13 +182,13 @@ Plugin loading is opt-in because plugin code runs as Python code.
 Generate a plugin lock file:
 
 ```bash
-python -m mcpshield.cli plugin-manifest ./plugins/trusted --out ./plugins.lock
+mcpshield plugin-manifest ./plugins/trusted --out ./plugins.lock
 ```
 
 Run with trust controls enabled:
 
 ```bash
-python -m mcpshield.cli scan ./samples \
+mcpshield scan ./samples \
   --allow-plugins \
   --plugins ./plugins/trusted \
   --allow-plugin-origin ./plugins/trusted \
@@ -203,7 +203,7 @@ python -m mcpshield.cli scan ./samples \
 The directory must contain `server.json`. If `package.json` is present, it is used automatically.
 
 ```bash
-python -m mcpshield.cli scan ./samples --out ./out
+mcpshield scan ./samples --out ./out
 ```
 
 ### Local file
@@ -211,7 +211,7 @@ python -m mcpshield.cli scan ./samples --out ./out
 Only files named `server.json` are accepted for direct file scans.
 
 ```bash
-python -m mcpshield.cli scan ./samples/server.json --out ./out
+mcpshield scan ./samples/server.json --out ./out
 ```
 
 Reports include the applied rules source path so review output remains attributable.
@@ -219,7 +219,7 @@ Reports include the applied rules source path so review output remains attributa
 ### Remote URL
 
 ```bash
-python -m mcpshield.cli scan https://example.com/server.json --out ./out
+mcpshield scan https://example.com/server.json --out ./out
 ```
 
 ### npm package
@@ -227,7 +227,7 @@ python -m mcpshield.cli scan https://example.com/server.json --out ./out
 The scanner fetches npm metadata and uses the latest tagged package version as a best-effort source.
 
 ```bash
-python -m mcpshield.cli scan @scope/package-name --out ./out
+mcpshield scan @scope/package-name --out ./out
 ```
 
 ## Rules and Tuning
