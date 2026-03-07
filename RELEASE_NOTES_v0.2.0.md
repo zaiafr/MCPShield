@@ -38,9 +38,9 @@ This release introduces extensible plugin checks with layered trust controls, pl
 ### Recommended Secure Plugin Usage
 
 ```bash
-python -m mcpshield.cli plugin-manifest ./plugins/trusted --out ./plugins.lock
+mcpshield plugin-manifest ./plugins/trusted --out ./plugins.lock
 
-python -m mcpshield.cli scan-batch ./fixtures \
+mcpshield scan-batch ./fixtures \
   --allow-plugins \
   --plugins ./plugins/trusted \
   --allow-plugin-origin ./plugins/trusted \
