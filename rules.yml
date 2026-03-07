@@ -1,4 +1,4 @@
-# MCP Risk Scanner rules configuration
+# MCPShield rules configuration
 # Use this file with: --rules ./rules.yml
 
 checks:

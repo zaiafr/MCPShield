@@ -6,6 +6,11 @@ from mcp_risk_scanner.checks import list_available_checks
 
 
 class DocsTests(unittest.TestCase):
+    def test_readme_uses_product_name_heading(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        readme = (repo_root / "README.md").read_text(encoding="utf-8")
+        self.assertTrue(readme.startswith("# MCPShield\n"))
+
     def test_check_catalog_lists_all_built_in_checks(self):
         repo_root = Path(__file__).resolve().parents[1]
         catalog_path = repo_root / "docs" / "checks.md"
