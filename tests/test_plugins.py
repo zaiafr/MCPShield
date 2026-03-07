@@ -11,6 +11,40 @@ from mcp_risk_scanner.plugins import load_plugin_checks, build_plugin_manifest
 
 
 class PluginTests(unittest.TestCase):
+    def test_example_plugins_load_and_emit_findings(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        plugin_dir = repo_root / "plugins" / "examples"
+        plugin_checks = load_plugin_checks([str(plugin_dir)])
+        self.assertEqual(
+            {check.check_id for check in plugin_checks},
+            {"plugin_file_count", "plugin_todo_tag"},
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "target"
+            target.mkdir()
+            (target / "server.json").write_text(
+                json.dumps(
+                    {
+                        "name": "example-target",
+                        "description": "TODO: tighten review before release",
+                        "tools": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            for index in range(21):
+                (target / f"module_{index}.py").write_text(
+                    "print('example')\n", encoding="utf-8"
+                )
+
+            scan_input = collect_input(str(target))
+            findings = run_checks(scan_input, extra_checks=plugin_checks)
+
+            self.assertIn("plugin_todo_tag", {finding.check_id for finding in findings})
+            self.assertIn("plugin_file_count", {finding.check_id for finding in findings})
+
     def test_load_plugin_checks_and_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

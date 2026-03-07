@@ -43,6 +43,19 @@ Plugin runners are sandboxed by policy in the scanner runtime:
 - `plugins/examples/plugin_todo_tag.py`
 - `plugins/examples/plugin_file_count.py`
 
+## Try The Example Plugins
+
+```bash
+python -m mcp_risk_scanner.cli plugin-manifest ./plugins/examples --out ./plugins/examples.lock
+
+python -m mcp_risk_scanner.cli scan ./samples \
+  --allow-plugins \
+  --plugins ./plugins/examples \
+  --allow-plugin-origin ./plugins/examples \
+  --plugin-lock ./plugins/examples.lock \
+  --out ./out
+```
+
 ## Generate Lock File
 
 ```bash
