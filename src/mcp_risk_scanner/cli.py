@@ -13,7 +13,7 @@ from .collector import collect_input
 from . import __version__
 from .models import Finding, ScanResult
 from .plugins import load_plugin_checks
-from .report import render_json, render_markdown
+from .report import render_batch_sarif, render_json, render_markdown, render_sarif
 from .rules import load_rules
 from .scoring import calculate_score
 
@@ -35,6 +35,11 @@ def main() -> None:
         "--out",
         default=".",
         help="Output directory for report files",
+    )
+    scan_parser.add_argument(
+        "--sarif",
+        action="store_true",
+        help="Also write SARIF output for CI/security tooling",
     )
     scan_parser.add_argument(
         "--rules",
@@ -83,6 +88,11 @@ def main() -> None:
         "--out",
         default=".",
         help="Output directory for report files",
+    )
+    batch_parser.add_argument(
+        "--sarif",
+        action="store_true",
+        help="Also write SARIF output for CI/security tooling",
     )
     batch_parser.add_argument(
         "--summary-only",
@@ -173,6 +183,7 @@ def main() -> None:
             allow_plugins=args.allow_plugins,
             allowed_origins=args.allow_plugin_origin,
             plugin_lock=args.plugin_lock,
+            sarif=args.sarif,
         )
     elif args.command == "scan-batch":
         _run_scan_batch(
@@ -187,6 +198,7 @@ def main() -> None:
             allow_plugins=args.allow_plugins,
             allowed_origins=args.allow_plugin_origin,
             plugin_lock=args.plugin_lock,
+            sarif=args.sarif,
         )
     elif args.command == "compare-summaries":
         _run_compare_summaries(args.old_csv, args.new_csv, args.out)
@@ -203,6 +215,7 @@ def _run_scan(
     allow_plugins: bool = False,
     allowed_origins: list[str] | None = None,
     plugin_lock: str | None = None,
+    sarif: bool = False,
     quiet: bool = False,
 ) -> None:
     plugin_checks = _resolve_plugins(
@@ -221,7 +234,7 @@ def _run_scan(
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     stem = _safe_stem(target)
-    _write_result_files(result, output_format, out, stem, quiet=quiet)
+    _write_result_files(result, output_format, out, stem, sarif=sarif, quiet=quiet)
     _emit(f"Final score: {result.score}/100 ({result.risk_level})", quiet=quiet)
 
 
@@ -267,6 +280,7 @@ def _run_scan_batch(
     allow_plugins: bool = False,
     allowed_origins: list[str] | None = None,
     plugin_lock: str | None = None,
+    sarif: bool = False,
     quiet: bool = False,
 ) -> None:
     root = Path(input_dir)
@@ -299,7 +313,7 @@ def _run_scan_batch(
         results.append(result)
         if not summary_only:
             _write_result_files(
-                result, output_format, out, _safe_stem(target.name), quiet=quiet
+                result, output_format, out, _safe_stem(target.name), sarif=sarif, quiet=quiet
             )
 
     summary = _build_summary(results)
@@ -314,6 +328,11 @@ def _run_scan_batch(
     summary_csv_path = out / "summary.csv"
     summary_csv_path.write_text(_render_summary_csv(results), encoding="utf-8")
     _emit(f"Wrote {summary_csv_path}", quiet=quiet)
+
+    if sarif:
+        summary_sarif_path = out / "summary.sarif"
+        summary_sarif_path.write_text(render_batch_sarif(results), encoding="utf-8")
+        _emit(f"Wrote {summary_sarif_path}", quiet=quiet)
 
     violations: list[str] = []
     if fail_on_critical and summary["risk_level_counts"].get("critical", 0) > 0:
@@ -332,7 +351,12 @@ def _run_scan_batch(
 
 
 def _write_result_files(
-    result: ScanResult, output_format: str, out: Path, stem: str, quiet: bool = False
+    result: ScanResult,
+    output_format: str,
+    out: Path,
+    stem: str,
+    sarif: bool = False,
+    quiet: bool = False,
 ) -> None:
     if output_format in {"json", "both"}:
         json_report = render_json(result)
@@ -345,6 +369,12 @@ def _write_result_files(
         md_path = out / f"{stem}.risk.md"
         md_path.write_text(md_report, encoding="utf-8")
         _emit(f"Wrote {md_path}", quiet=quiet)
+
+    if sarif:
+        sarif_report = render_sarif(result)
+        sarif_path = out / f"{stem}.risk.sarif"
+        sarif_path.write_text(sarif_report, encoding="utf-8")
+        _emit(f"Wrote {sarif_path}", quiet=quiet)
 
 
 def _sort_findings(findings: list[Finding]) -> list[Finding]:
