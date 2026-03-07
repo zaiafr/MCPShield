@@ -29,6 +29,9 @@ List checks under current rules:
 python -m mcp_risk_scanner.cli scan --list-checks --rules ./rules.yml
 ```
 
+Built-in check catalog:
+- `docs/checks.md`
+
 Load custom plugin checks:
 
 ```bash
